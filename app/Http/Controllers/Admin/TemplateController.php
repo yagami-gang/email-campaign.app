@@ -19,7 +19,7 @@ class TemplateController extends Controller
         // Récupère tous les templates de la base de données
         $templates = Template::all();
         // Passe les templates à la vue 'admin.templates.index' pour affichage
-        return view('admin.templates.index', compact('templates'));
+        return view('pages.templates_html.index', compact('templates'));
     }
 
     /**
@@ -28,7 +28,7 @@ class TemplateController extends Controller
     public function create()
     {
         // Renvoie simplement la vue du formulaire de création
-        return view('admin.templates.create');
+        return view('pages.templates_html.create');
     }
 
     /**

@@ -23,7 +23,7 @@ class CampaignController extends Controller
     public function index()
     {
         $campaigns = Campaign::with(['template', 'smtpServers'])->get();
-        return view('admin.campaigns.index', compact('campaigns'));
+        return view('pages.campaigns.index', compact('campaigns'));
     }
 
     /**
@@ -35,7 +35,7 @@ class CampaignController extends Controller
         $smtpServers = SmtpServer::where('is_active', true)->get();
         $mailingLists = MailingList::all(); // Vous devrez choisir comment lier une mailing list à une campagne
         
-        return view('admin.campaigns.create', compact('templates', 'smtpServers', 'mailingLists'));
+        return view('pages.campaigns.create', compact('templates', 'smtpServers', 'mailingLists'));
     }
 
     /**
@@ -46,45 +46,22 @@ class CampaignController extends Controller
      */
     public function store(StoreCampaignRequest $request)
     {
-        DB::beginTransaction();
-        try {
-            $validatedData = $request->validated();
+        $validated = $request->validated();
 
-            $campaign = Campaign::create([
-                'name' => $validatedData['name'],
-                'subject' => $validatedData['subject'],
-                'sender_name' => $validatedData['sender_name'],
-                'sender_email' => $validatedData['sender_email'],
-                'send_frequency_minutes' => $validatedData['send_frequency_minutes'] ?? 0,
-                'max_daily_sends' => $validatedData['max_daily_sends'] ?? 0,
-                'scheduled_at' => $validatedData['scheduled_at'],
-                'template_id' => $validatedData['template_id'],
-                'status' => 'pending', // Nouvelle campagne est toujours en attente
-                'progress' => 0,       // Progression initiale
-            ]);
+        // Création minimale (étape 1)
+        $campaign = Campaign::create([
+            'name'          => $validated['name'],
+            'subject'       => $validated['subject'],
+            'template_id'   => $validated['template_id'],
+            'status'        => 'pending',
+            'progress'      => 0,
+            'nbre_contacts' => $validated['nbre_contacts'],       // pas saisi à l'étape 1
+        ]);
 
-            $campaign->smtpServers()->attach($validatedData['smtp_server_ids']);
-
-            DB::commit();
-
-            if ($request->expectsJson()) {
-                return Response::json([
-                    'message' => 'La campagne a été créée avec succès ! Elle est en attente.',
-                    'campaign_id' => $campaign->id,
-                    'status' => $campaign->status,
-                    'progress' => $campaign->progress
-                ], 201); // 201 Created
-            }
-            return redirect()->route('admin.campaigns.index')->with('success', 'La campagne a été créée avec succès ! Elle est en attente.');
-
-        } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error("Erreur lors de la création de la campagne: " . $e->getMessage());
-            if ($request->expectsJson()) {
-                return Response::json(['error' => 'Erreur lors de la création de la campagne.', 'message' => $e->getMessage()], 500);
-            }
-            return redirect()->back()->with('error', 'Erreur lors de la création de la campagne.');
-        }
+        // 👉 redirection vers l’étape 2 (edit)
+        return redirect()
+            ->route('admin.campaigns.edit', $campaign->id)
+            ->with('status', 'La campagne a été créée. Complète la configuration des serveurs SMTP.');
     }
 
     /**
@@ -92,7 +69,7 @@ class CampaignController extends Controller
      */
     public function show(Campaign $campaign)
     {
-        return redirect()->route('admin.campaigns.edit', $campaign);
+         return view('pages.campaigns.show', compact('campaign'));
     }
 
     /**
@@ -106,7 +83,7 @@ class CampaignController extends Controller
 
         $selectedSmtpServers = $campaign->smtpServers->pluck('id')->toArray();
         
-        return view('admin.campaigns.edit', compact('campaign', 'templates', 'smtpServers', 'mailingLists', 'selectedSmtpServers'));
+        return view('pages.campaigns.edit', compact('campaign', 'templates', 'smtpServers', 'mailingLists', 'selectedSmtpServers'));
     }
 
     /**
@@ -116,40 +93,86 @@ class CampaignController extends Controller
      * @param  \App\Models\Campaign  $campaign
      * @return \Illuminate\Http\RedirectResponse|\Illuminate\Http\JsonResponse
      */
-    public function update(UpdateCampaignRequest $request, Campaign $campaign)
+    public function update(Request $request, Campaign $campaign)
     {
-        DB::beginTransaction();
-        try {
-            $validatedData = $request->validated();
+        // RÈGLES
+        $statusValues = ['draft','scheduled','running','paused','completed','failed'];
 
+        $validator = Validator::make($request->all(), [
+            // Champs "campagne"
+            'name'        => ['required','string','max:255'],
+            'subject'     => ['required','string','max:255'],
+            'template_id' => ['required','exists:templates,id'],
+
+            // Lignes pivot (table campaign_smtp_server)
+            'smtp_rows'   => ['nullable','array'],
+            'smtp_rows.*.smtp_server_id'       => ['required','exists:smtp_servers,id','distinct'], // 1 serveur = 1 ligne
+            'smtp_rows.*.sender_name'          => ['nullable','string','max:255'],
+            'smtp_rows.*.sender_email'         => ['nullable','email','max:255'],
+            'smtp_rows.*.send_frequency_minutes'=> ['nullable','integer','min:1'],
+            'smtp_rows.*.max_daily_sends'      => ['nullable','integer','min:1'],
+            'smtp_rows.*.scheduled_at'         => ['nullable','date'], // "Y-m-d H:i:s" ou "Y-m-d\TH:i" accepté
+            'smtp_rows.*.status'               => ['nullable', Rule::in($statusValues)],
+            'smtp_rows.*.progress'             => ['nullable','integer','min:0','max:100'],
+            'smtp_rows.*.nbre_contacts'        => ['nullable','integer','min:0'],
+        ], [
+            'smtp_rows.*.smtp_server_id.distinct' => 'Chaque serveur SMTP ne peut être sélectionné qu’une seule fois.',
+        ]);
+
+        if ($validator->fails()) {
+            return back()->withErrors($validator)->withInput();
+        }
+
+        $data = $validator->validated();
+
+        // Normalisation: transforme "" en null sur les champs pivot
+        $smtpRows = collect($data['smtp_rows'] ?? [])->map(function(array $row){
+            foreach (['sender_name','sender_email','send_frequency_minutes','max_daily_sends','scheduled_at','status','progress','nbre_contacts'] as $k) {
+                if (array_key_exists($k, $row) && $row[$k] === '') {
+                    $row[$k] = null;
+                }
+            }
+            return $row;
+        });
+
+        DB::transaction(function () use ($campaign, $data, $smtpRows) {
+            // 1) Mettre à jour la campagne
             $campaign->update([
-                'name' => $validatedData['name'],
-                'subject' => $validatedData['subject'],
-                'sender_name' => $validatedData['sender_name'],
-                'sender_email' => $validatedData['sender_email'],
-                'send_frequency_minutes' => $validatedData['send_frequency_minutes'] ?? 0,
-                'max_daily_sends' => $validatedData['max_daily_sends'] ?? 0,
-                'scheduled_at' => $validatedData['scheduled_at'],
-                'template_id' => $validatedData['template_id'],
-                // Le statut et la progression ne sont pas modifiés via ce formulaire
+                'name'        => $data['name'],
+                'subject'     => $data['subject'],
+                'template_id' => $data['template_id'],
+                // status/progress/nbre_contacts de la campagne ne sont pas édités ici (ils existent au pivot)
             ]);
 
-            $campaign->smtpServers()->sync($validatedData['smtp_server_ids']);
-
-            DB::commit();
-            if ($request->expectsJson()) {
-                return Response::json(['message' => 'La campagne a été mise à jour avec succès !'], 200);
+            // 2) Préparer le tableau pour sync()
+            //    Format attendu: [ smtp_server_id => [pivotCols...] ]
+            $sync = [];
+            foreach ($smtpRows as $row) {
+                $sync[(int)$row['smtp_server_id']] = [
+                    'sender_name'            => $row['sender_name'] ?? null,
+                    'sender_email'           => $row['sender_email'] ?? null,
+                    'send_frequency_minutes' => $row['send_frequency_minutes'] ?? null,
+                    'max_daily_sends'        => $row['max_daily_sends'] ?? null,
+                    'scheduled_at'           => $row['scheduled_at'] ?? null,
+                    'status'                 => $row['status'] ?? null,
+                    'progress'               => $row['progress'] ?? null,
+                    'nbre_contacts'          => $row['nbre_contacts'] ?? null,
+                ];
             }
-            return redirect()->route('admin.campaigns.index')->with('success', 'La campagne a été mise à jour avec succès !');
 
-        } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error("Erreur lors de la mise à jour de la campagne ID {$campaign->id}: " . $e->getMessage());
-            if ($request->expectsJson()) {
-                return Response::json(['error' => 'Erreur lors de la mise à jour de la campagne.', 'message' => $e->getMessage()], 500);
-            }
-            return redirect()->back()->with('error', 'Erreur lors de la mise à jour de la campagne.');
+            // 3) Sync complet (ajoute, met à jour, supprime ce qui n'est plus présent)
+            $campaign->smtpServers()->sync($sync);
+        });
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'message' => 'Campagne mise à jour avec succès.',
+                'campaign_id' => $campaign->id,
+                'pivot_count' => $campaign->smtpServers()->count(),
+            ]);
         }
+
+        return back()->with('status', 'Campagne et liaisons SMTP mises à jour.');
     }
 
     /**

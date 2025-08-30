@@ -28,14 +28,8 @@ class StoreCampaignRequest extends FormRequest
         return [
             'name' => 'required|string|max:255',
             'subject' => 'required|string|max:255',
-            'sender_name' => 'required|string|max:255',
-            'sender_email' => 'required|email|max:255',
-            'send_frequency_minutes' => 'nullable|integer|min:0', // 0 signifie pas de limite
-            'max_daily_sends' => 'nullable|integer|min:0', // 0 signifie pas de limite
-            'scheduled_at' => 'required|date|after_or_equal:now', // Date de planification, doit être future ou actuelle
-            'template_id' => 'required|exists:templates,id', // Doit exister dans la table 'templates'
-            'smtp_server_ids' => 'required|array|min:1', // Au moins un serveur SMTP doit être sélectionné
-            'smtp_server_ids.*' => 'exists:smtp_servers,id', // Chaque ID de serveur doit exister
+            'template_id' => 'required|exists:templates,id',
+            'nbre_contacts' => 'nullable|integer|min:0', // Doit exister dans la table 'templates'
             // NOTE: Si vous liez une mailing list directement à la campagne, ajoutez une règle ici
             // 'mailing_list_id' => 'required|exists:mailing_lists,id',
         ];

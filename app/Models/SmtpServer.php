@@ -53,9 +53,15 @@ class SmtpServer extends Model
      *
      * @return \Illuminate\Database\Eloquent\Relations\HasMany
      */
+
     public function campaigns(): BelongsToMany
     {
         return $this->belongsToMany(Campaign::class, 'campaign_smtp_server')
-                    ->withTimestamps();
+            ->withPivot([
+                'sender_name','sender_email',
+                'send_frequency_minutes','max_daily_sends',
+                'scheduled_at','status','progress','nbre_contacts',
+            ])
+            ->withTimestamps();
     }
 }

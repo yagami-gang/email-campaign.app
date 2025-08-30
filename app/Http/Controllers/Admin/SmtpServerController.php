@@ -20,7 +20,7 @@ class SmtpServerController extends Controller
         // Récupère tous les serveurs SMTP de la base de données
         $smtpServers = SmtpServer::all();
         // Passe les serveurs SMTP à la vue 'admin.smtp_servers.index' pour affichage
-        return view('admin.smtp_servers.index', compact('smtpServers'));
+        return view('pages.smtp_servers.index', compact('smtpServers'));
     }
 
     /**
@@ -29,7 +29,7 @@ class SmtpServerController extends Controller
     public function create()
     {
         // Renvoie simplement la vue du formulaire de création
-        return view('admin.smtp_servers.create');
+        return view('pages.smtp_servers.create');
     }
 
     /**
@@ -46,7 +46,7 @@ class SmtpServerController extends Controller
         $validatedData = $request->validated();
         
         // Hashe le mot de passe avant de le stocker
-        $validatedData['password'] = Hash::make($validatedData['password']);
+        //$validatedData['password'] = Hash::make($validatedData['password']);
         $validatedData['is_active'] = true;
         // Crée un nouveau serveur SMTP avec les données validées et hashées
         SmtpServer::create($validatedData);

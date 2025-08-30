@@ -21,14 +21,10 @@ class Campaign extends Model
     protected $fillable = [
         'name',
         'subject',
-        'sender_name',
-        'sender_email',
-        'send_frequency_minutes',
-        'max_daily_sends',
-        'scheduled_at',
         'status',
         'progress',
         'template_id',
+        'nbre_contacts'
     ];
 
     /**
@@ -38,13 +34,13 @@ class Campaign extends Model
      *
      * @var array<string, string>
      */
-    protected $casts = [
-        'send_frequency_minutes' => 'integer',
-        'max_daily_sends' => 'integer',
-        'scheduled_at' => 'datetime',
-        'status' => 'string',
-        'progress' => 'integer',
-    ];
+    // protected $casts = [
+    //     'send_frequency_minutes' => 'integer',
+    //     'max_daily_sends' => 'integer',
+    //     'scheduled_at' => 'datetime',
+    //     'status' => 'string',
+    //     'progress' => 'integer',
+    // ];
 
     /**
      * Définit la relation entre une campagne et le template HTML qu'elle utilise.
@@ -64,10 +60,16 @@ class Campaign extends Model
      *
      * @return \Illuminate\Database\Eloquent\Relations\BelongsToMany
      */
+
     public function smtpServers(): BelongsToMany
     {
         return $this->belongsToMany(SmtpServer::class, 'campaign_smtp_server')
-                    ->withTimestamps(); // Inclut created_at et updated_at sur la table pivot
+            ->withPivot([
+                'sender_name','sender_email',
+                'send_frequency_minutes','max_daily_sends',
+                'scheduled_at','status','progress','nbre_contacts',
+            ])
+            ->withTimestamps();
     }
 
     /**

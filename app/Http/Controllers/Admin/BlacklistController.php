@@ -23,7 +23,7 @@ class BlacklistController extends Controller
     {
         // Récupère toutes les entrées de la blacklist avec la relation vers le template si elle existe
         $blacklistEntries = Blacklist::with('template')->latest()->get();
-        return view('admin.blacklist.index', compact('blacklistEntries'));
+        return view('pages.blacklists.index', compact('blacklistEntries'));
     }
 
     /**
@@ -34,7 +34,7 @@ class BlacklistController extends Controller
     public function create()
     {
         $templates = Template::all(); // On peut lier l'entrée à un template existant
-        return view('admin.blacklist.create', compact('templates'));
+        return view('pages.blacklists.create', compact('templates'));
     }
 
     /**
