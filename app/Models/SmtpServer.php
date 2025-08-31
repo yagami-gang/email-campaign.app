@@ -18,11 +18,7 @@ class SmtpServer extends Model
      */
     protected $fillable = [
         'name',
-        'host',
-        'port',
-        'username',
-        'password',
-        'encryption',
+        'url',
         'is_active',
     ];
 
@@ -47,21 +43,4 @@ class SmtpServer extends Model
         'is_active' => 'boolean',
     ];
 
-    /**
-     * Définit la relation entre un serveur SMTP et les campagnes qui l'utilisent.
-     * Un serveur SMTP peut être utilisé par plusieurs campagnes.
-     *
-     * @return \Illuminate\Database\Eloquent\Relations\HasMany
-     */
-
-    public function campaigns(): BelongsToMany
-    {
-        return $this->belongsToMany(Campaign::class, 'campaign_smtp_server')
-            ->withPivot([
-                'sender_name','sender_email',
-                'send_frequency_minutes','max_daily_sends',
-                'scheduled_at','status','progress','nbre_contacts',
-            ])
-            ->withTimestamps();
-    }
 }

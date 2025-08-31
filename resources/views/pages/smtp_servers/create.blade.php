@@ -1,77 +1,77 @@
 @extends('layouts.layout')
 
-@section('title','Ajouter un serveur SMTP')
+@php
+    $isEditing = isset($smtpServer);
+    $title = $isEditing ? 'Modifier un serveur SMTP' : 'Ajouter un serveur SMTP';
+@endphp
+
+@section('title', $title)
 
 @section('content')
-  <div class="toolbar">
-    <h2 style="margin:0">Ajouter un serveur SMTP</h2>
-    <a class="btn" href="{{ route('admin.smtp_servers.index') }}"><i class="fa-solid fa-rectangle-list"></i> Retour à la liste</a>
-  </div>
-
-  @if ($errors->any())
-    <div class="card" style="border-color:#ef4444">
-      <ul style="margin:0;padding-left:18px">
-        @foreach ($errors->all() as $error)
-          <li>{{ $error }}</li>
-        @endforeach
-      </ul>
+    <div class="toolbar">
+        <h2 style="margin:0">{{ $title }}</h2>
+        <a class="btn" href="{{ route('admin.smtp_servers.index') }}">
+            <i class="fa-solid fa-rectangle-list"></i> Retour à la liste
+        </a>
     </div>
-    <br>
-  @endif
 
-  <div class="card">
-    <form method="POST" action="{{ route('admin.smtp_servers.store') }}" class="grid cols-2" autocomplete="off">
-      @csrf
+    @if ($errors->any())
+        <div class="alert alert-danger">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+            <div>
+                <strong>Une ou plusieurs erreurs ont été détectées :</strong>
+                <ul style="margin:8px 0 0;padding-left:18px">
+                    @foreach ($errors->all() as $error)
+                        <li>{{ $error }}</li>
+                    @endforeach
+                </ul>
+            </div>
+        </div>
+    @endif
 
-      {{-- Obligatoires --}}
-      <div class="field">
-        <label for="name"><i class="fa-solid fa-tag"></i> Nom <span class="hint">(obligatoire)</span></label>
-        <input id="name" name="name" type="text" value="{{ old('name') }}" required>
-      </div>
+    <div class="card">
+        <form method="POST" action="{{ $isEditing ? route('admin.smtp_servers.update', $smtpServer->id) : route('admin.smtp_servers.store') }}" autocomplete="off">
+            @csrf
+            @if($isEditing)
+                @method('PUT')
+            @endif
 
-      <div class="field">
-        <label for="host"><i class="fa-solid fa-server"></i> Host <span class="hint">(obligatoire)</span></label>
-        <input id="host" name="host" type="text" placeholder="mail.mon-domaine.com" value="{{ old('host') }}" required>
-      </div>
+            {{-- Nom --}}
+            <div class="field">
+                <label for="name">
+                    <i class="fa-solid fa-tag" style="opacity: 0.7;"></i> Nom
+                </label>
+                <input id="name" name="name" type="text" value="{{ old('name', $isEditing ? $smtpServer->name : '') }}" placeholder="Ex: Mon Serveur Principal" required>
+                <span class="hint">Un nom facile à reconnaître pour vous.</span>
+            </div>
 
-      {{-- Optionnels --}}
-      <div class="field">
-        <label for="port"><i class="fa-solid fa-plug"></i> Port</label>
-        <input id="port" name="port" type="number" min="1" step="1" placeholder="587" value="{{ old('port') }}">
-        <small class="hint">587 (STARTTLS) ou 465 (SSL). Laisse vide pour valeur par défaut côté code.</small>
-      </div>
+            {{-- URL --}}
+            <div class="field">
+                <label for="url">
+                    <i class="fa-solid fa-link" style="opacity: 0.7;"></i> URL
+                </label>
+                <input id="url" name="url" type="text" placeholder="https://api.smtp.com" value="{{ old('url', $isEditing ? $smtpServer->url : '') }}" required>
+            </div>
 
-      <div class="field">
-        <label for="username"><i class="fa-solid fa-user"></i> Nom d’utilisateur</label>
-        <input id="username" name="username" type="text" placeholder="expediteur@mon-domaine.com" value="{{ old('username') }}">
-      </div>
+            {{-- Statut 'Actif' --}}
+            <div class="field" style="grid-column: 1 / -1;">
+                <label for="is_active">
+                    <i class="fa-solid fa-power-off" style="opacity: 0.7;"></i> Statut
+                </label>
+                <div style="display: flex; align-items: center; gap: 12px; margin-top: 5px;">
+                    <label class="toggle-switch">
+                        <input id="is_active" name="is_active" type="checkbox" value="1" @checked(old('is_active', $isEditing ? $smtpServer->is_active : true))>
+                        <span class="slider"></span>
+                    </label>
+                    <span class="hint" style="margin:0">Coché = utilisable pour les envois</span>
+                </div>
+            </div>
 
-      <div class="field">
-        <label for="password"><i class="fa-solid fa-key"></i> Mot de passe</label>
-        <input id="password" name="password" type="password" value="">
-      </div>
-
-      <div class="field">
-        <label for="encryption"><i class="fa-solid fa-lock"></i> Chiffrement</label>
-        <select id="encryption" name="encryption">
-          <option value="" @selected(old('encryption')==='')>Aucun</option>
-          <option value="tls" @selected(old('encryption')==='tls')>TLS (587)</option>
-          <option value="ssl" @selected(old('encryption')==='ssl')>SSL (465)</option>
-        </select>
-      </div>
-
-      <div class="field">
-        <label for="is_active"><i class="fa-solid fa-toggle-on"></i> Activer</label>
-        <label style="display:flex;align-items:center;gap:8px">
-          <input id="is_active" name="is_active" type="checkbox" value="1" {{ old('is_active', true) ? 'checked' : '' }}>
-          <span class="hint">Coché = utilisable pour les envois</span>
-        </label>
-      </div>
-
-      <div style="grid-column:1/-1;display:flex;gap:10px">
-        <button type="submit" class="btn ok"><i class="fa-solid fa-floppy-disk"></i> Enregistrer</button>
-        <a href="{{ route('admin.smtp_servers.index') }}" class="btn"><i class="fa-solid fa-arrow-left"></i> Annuler</a>
-      </div>
-    </form>
-  </div>
+            {{-- Actions --}}
+            <div class="form-actions">
+                <button type="submit" class="btn ok"><i class="fa-solid fa-floppy-disk"></i> Enregistrer</button>
+                <a href="{{ route('admin.smtp_servers.index') }}" class="btn">Annuler</a>
+            </div>
+        </form>
+    </div>
 @endsection

@@ -24,7 +24,7 @@
             </thead>
             <tbody>
                 @foreach($campaigns as $c)
-                    <tr data-campaign-id="{{ $c->id }}" data-campaign-status="{{ $c->status }}">
+                    <tr data-name="{{ $c->name }}" data-campaign-id="{{ $c->id }}" data-campaign-status="{{ $c->status }}">
                         <td>#{{ $c->id }}</td>
                         <td>{{ $c->name }}</td>
                         <td>{{ $c->subject }}</td>
@@ -79,7 +79,7 @@
 
                                     <div class="dropdown-divider"></div>
 
-                                    <button class="dropdown-item campaign-action-btn" data-action="launch" data-id="{{ $c->id }}" data-name="{{ $c->name }}" data-allowed-status="draft,paused,pending">
+                                    <button class="dropdown-item campaign-action-btn" data-action="launch" data-id="{{ $c->id }}" data-name="{{ $c->name }}" data-allowed-status="paused,pending">
                                         <i class="fa-solid fa-play"></i> Lancer
                                     </button>
                                     <button class="dropdown-item campaign-action-btn" data-action="pause" data-id="{{ $c->id }}" data-name="{{ $c->name }}" data-allowed-status="running">
@@ -88,7 +88,7 @@
                                     <button class="dropdown-item campaign-action-btn" data-action="resume" data-id="{{ $c->id }}" data-name="{{ $c->name }}" data-allowed-status="paused">
                                         <i class="fa-solid fa-sync"></i> Reprendre
                                     </button>
-                                    <button class="dropdown-item danger campaign-action-btn" data-action="delete" data-id="{{ $c->id }}" data-name="{{ $c->name }}" data-allowed-status="draft,scheduled,completed,failed,paused">
+                                    <button class="dropdown-item danger campaign-action-btn" data-action="delete" data-id="{{ $c->id }}" data-name="{{ $c->name }}" data-allowed-status="pending,scheduled,completed,failed,paused">
                                         <i class="fa-solid fa-trash"></i> Supprimer
                                     </button>
                                 </div>
@@ -105,129 +105,204 @@
 {{-- SweetAlert2 est recommandé pour les modales de confirmation --}}
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    // --- Initialisation de DataTables ---
-    const dataTable = $('#campaigns-table').DataTable({
-        pageLength: 10,
-        order: [[0, 'desc']],
-        columnDefs: [{ targets: 'no-sort', orderable: false }],
-        language: { url: 'https://cdn.datatables.net/plug-ins/1.13.6/i18n/fr-FR.json' }
-    });
-
-    // --- Logique du dropdown ---
-    function updateCampaignActionButtons(rowElement) {
-        const status = rowElement.getAttribute('data-campaign-status');
-        const buttons = rowElement.querySelectorAll('.campaign-action-btn');
-        buttons.forEach(button => {
-            const allowed = button.getAttribute('data-allowed-status').split(',');
-            if (allowed.includes(status)) {
-                button.classList.remove('is-disabled');
-                button.removeAttribute('disabled');
-            } else {
-                button.classList.add('is-disabled');
-                button.setAttribute('disabled', 'true');
-            }
+    document.addEventListener('DOMContentLoaded', function() {
+        // --- Initialisation de DataTables ---
+        const dataTable = $('#campaigns-table').DataTable({
+            pageLength: 10,
+            order: [[0, 'desc']],
+            columnDefs: [{ targets: 'no-sort', orderable: false }],
+            language: { url: 'https://cdn.datatables.net/plug-ins/1.13.6/i18n/fr-FR.json' }
         });
-    }
 
-    // Appliquer la logique au chargement de la page pour chaque ligne
-    document.querySelectorAll('#campaigns-table tbody tr').forEach(updateCampaignActionButtons);
-
-    // Gérer l'ouverture/fermeture des menus déroulants
-    document.addEventListener('click', function(e) {
-        const toggle = e.target.closest('.dropdown-toggle');
-        const openMenus = document.querySelectorAll('.dropdown-menu.show');
-
-        if (toggle) {
-            e.preventDefault();
-            const menu = toggle.nextElementSibling;
-            const isShowing = menu.classList.contains('show');
-            openMenus.forEach(m => {
-                m.classList.remove('show');
-                m.previousElementSibling.setAttribute('aria-expanded', 'false');
-            });
-            if (!isShowing) {
-                menu.classList.add('show');
-                toggle.setAttribute('aria-expanded', 'true');
-            }
-        } else if (!e.target.closest('.dropdown-actions')) {
-            openMenus.forEach(m => {
-                m.classList.remove('show');
-                m.previousElementSibling.setAttribute('aria-expanded', 'false');
+        // --- Logique du dropdown ---
+        function updateCampaignActionButtons(rowElement) {
+            const status = rowElement.getAttribute('data-campaign-status');
+            const buttons = rowElement.querySelectorAll('.campaign-action-btn');
+            buttons.forEach(button => {
+                const allowed = button.getAttribute('data-allowed-status').split(',');
+                if (allowed.includes(status)) {
+                    button.classList.remove('is-disabled');
+                    button.removeAttribute('disabled');
+                } else {
+                    button.classList.add('is-disabled');
+                    button.setAttribute('disabled', 'true');
+                }
             });
         }
-    });
 
-    // --- Logique des actions de campagne ---
-    const actionConfigs = {
-        'delete': { title: 'Supprimer la campagne', verb: 'supprimer', past: 'supprimée', removeRow: true },
-        'launch': { title: 'Lancer la campagne', verb: 'lancer', past: 'lancée', newStatus: 'running' },
-        'pause': { title: 'Mettre en pause', verb: 'mettre en pause', past: 'mise en pause', newStatus: 'paused' },
-        'resume': { title: 'Reprendre la campagne', verb: 'reprendre', past: 'reprise', newStatus: 'running' }
-    };
+        document.querySelectorAll('#campaigns-table tbody tr').forEach(updateCampaignActionButtons);
 
-    const statusMap = {
-        'draft': { label: 'Brouillon', class: 'status-draft' }, 'scheduled': { label: 'Planifiée', class: 'status-scheduled' },
-        'running': { label: 'En cours', class: 'status-running' }, 'paused': { label: 'En pause', class: 'status-paused' },
-        'completed': { label: 'Terminée', class: 'status-completed' }, 'failed': { label: 'Échec', class: 'status-failed' }
-    };
-
-    async function handleCampaignAction(button) {
-        const action = button.dataset.action;
-        const config = actionConfigs[action];
-        if (!config) return;
-
-        const id = button.dataset.id;
-        const name = button.dataset.name;
-        const row = button.closest('tr');
-
-        const result = await Swal.fire({
-            title: config.title,
-            html: `Êtes-vous sûr de vouloir ${config.verb} la campagne "<strong>${name}</strong>" ?`,
-            icon: 'warning',
-            showCancelButton: true,
-            confirmButtonText: `Oui, ${config.verb} !`,
-            cancelButtonText: 'Annuler'
+        document.addEventListener('click', function(e) {
+            const toggle = e.target.closest('.dropdown-toggle');
+            const openMenus = document.querySelectorAll('.dropdown-menu.show');
+            if (toggle) {
+                e.preventDefault();
+                const menu = toggle.nextElementSibling;
+                const isShowing = menu.classList.contains('show');
+                openMenus.forEach(m => {
+                    m.classList.remove('show');
+                    m.previousElementSibling.setAttribute('aria-expanded', 'false');
+                });
+                if (!isShowing) {
+                    menu.classList.add('show');
+                    toggle.setAttribute('aria-expanded', 'true');
+                }
+            } else if (!e.target.closest('.dropdown-actions')) {
+                openMenus.forEach(m => {
+                    m.classList.remove('show');
+                    m.previousElementSibling.setAttribute('aria-expanded', 'false');
+                });
+            }
         });
 
-        if (result.isConfirmed) {
-            // Remplacer par un véritable appel API (fetch/axios)
-            console.log(`Action: ${action} sur campagne ID: ${id}`);
-            // Simuler le succès
-            const isSuccess = true;
+        // --- Logique des actions de campagne ---
+        const actionConfigs = {
+            'delete': { title: 'Supprimer la campagne', verb: 'supprimer', past: 'supprimée', removeRow: true, method: 'DELETE' },
+            'launch': { title: 'Lancer la campagne', verb: 'lancer', past: 'lancée', newStatus: 'running', method: 'POST' },
+            'pause': { title: 'Mettre en pause', verb: 'mettre en pause', past: 'mise en pause', newStatus: 'paused', method: 'POST' },
+            'resume': { title: 'Reprendre la campagne', verb: 'reprendre', past: 'reprise', newStatus: 'running', method: 'POST' }
+        };
 
-            if (isSuccess) {
-                await Swal.fire('Succès !', `La campagne a été ${config.past} avec succès.`, 'success');
+        const statusMap = {
+            'pending': { label: 'Brouillon', class: 'status-draft' },
+            'running': { label: 'En cours', class: 'status-running' },
+            'paused': { label: 'En pause', class: 'status-paused' },
+            'completed': { label: 'Terminée', class: 'status-completed' },
+            'failed': { label: 'Échec', class: 'status-failed' }
+        };
 
-                if (config.removeRow) {
-                    dataTable.row(row).remove().draw();
-                } else if (config.newStatus) {
-                    row.dataset.campaignStatus = config.newStatus;
-                    const newStatusInfo = statusMap[config.newStatus];
+        // --- Fonctions de mise à jour de la progression ---
 
-                    const statusCell = Array.from(row.cells).find(cell => cell.querySelector('.badge[class*="status-"]'));
-                    if (statusCell) {
-                        const newBadge = statusCell.querySelector('.badge');
-                        Object.values(statusMap).forEach(s => newBadge.classList.remove(s.class));
-                        newBadge.classList.add(newStatusInfo.class);
-                        newBadge.innerHTML = `<i class="fa-solid fa-circle"></i> ${newStatusInfo.label}`;
+    function updateCampaignRow(rowElement, newStatus, newProgress) {
+        rowElement.dataset.campaignStatus = newStatus;
+
+        // Mise à jour du badge de statut
+        const statusCell = rowElement.cells[5];
+        if (statusCell) {
+            const newStatusInfo = statusMap[newStatus];
+            const newBadge = statusCell.querySelector('.badge');
+            if (newBadge) {
+                Object.values(statusMap).forEach(s => newBadge.classList.remove(s.class));
+                newBadge.classList.add(newStatusInfo.class);
+                newBadge.innerHTML = `<i class="fa-solid fa-circle"></i> ${newStatusInfo.label}`;
+            }
+        }
+
+        // Mise à jour de la barre de progression
+        const progressCell = rowElement.cells[6];
+        if (progressCell) {
+            const progressBar = progressCell.querySelector('.progress-value');
+            const progressText = progressCell.querySelector('.progress-text');
+            const progressContainer = progressCell.querySelector('.progress-container');
+            if (progressBar && progressText && progressContainer) {
+                progressBar.style.width = `${newProgress}%`;
+                progressText.textContent = `${newProgress}%`;
+                progressContainer.title = `${newProgress}%`;
+            }
+        }
+        updateCampaignActionButtons(rowElement);
+    }
+
+let pollingInterval = null;
+const POLLING_RATE_MS = 5000; // Poll every 5 seconds
+
+async function pollCampaignsProgress() {
+    const runningCampaigns = document.querySelectorAll('tr[data-campaign-status="running"]');
+    if (runningCampaigns.length === 0) {
+        if (pollingInterval) {
+            clearInterval(pollingInterval);
+            pollingInterval = null;
+        }
+        return;
+    }
+
+    for (const row of runningCampaigns) {
+        const campaignId = row.dataset.campaignId;
+        try {
+            const response = await fetch(`/admin/campaigns/${campaignId}/progress`, {
+                method: 'GET',
+                headers: { 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-TOKEN': '{{csrf_token()}}', }
+            });
+            if (!response.ok) throw new Error('Failed to fetch status');
+
+            const data = await response.json();
+            updateCampaignRow(row, data.status, data.progress);
+        } catch (error) {
+            console.error(`Erreur lors de la récupération du statut pour la campagne ${campaignId}:`, error);
+        }
+    }
+}
+
+        async function handleCampaignAction(button) {
+            const action = button.dataset.action;
+            const config = actionConfigs[action];
+            if (!config) return;
+
+            const row = button.closest('tr');
+            console.log( row.dataset);
+
+            const campaignId = row.dataset.campaignId;
+            const campaignName = row.dataset.name;
+
+            // Construction de l'URL d'API de manière statique avec l'ID
+            const url = `/admin/campaigns/${campaignId}/${action}`;
+
+            const result = await Swal.fire({
+                title: config.title,
+                html: `Êtes-vous sûr de vouloir ${config.verb} la campagne "<strong>${campaignName}</strong>" ?`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: `Oui, ${config.verb} !`,
+                cancelButtonText: 'Annuler'
+            });
+
+            if (result.isConfirmed) {
+                try {
+                    const response = await fetch(url, {
+                        method: config.method,
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'Content-Type': 'application/json',
+                            'X-CSRF-TOKEN': '{{csrf_token()}}',
+                        },
+                        body: JSON.stringify({
+                            _method: config.method === 'DELETE' ? 'DELETE' : undefined
+                        })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`Erreur HTTP: ${response.status} ${response.statusText}`);
                     }
 
-                    updateCampaignActionButtons(row);
+                    await Swal.fire('Succès !', `La campagne a été ${config.past} avec succès.`, 'success');
+
+                    if (config.removeRow) {
+                        dataTable.row(row).remove().draw();
+                    } else if (config.newStatus) {
+                        row.dataset.campaignStatus = config.newStatus;
+                        const newStatusInfo = statusMap[config.newStatus];
+                        const statusCell = Array.from(row.cells).find(cell => cell.querySelector('.badge[class*="status-"]'));
+                        if (statusCell) {
+                            const newBadge = statusCell.querySelector('.badge');
+                            Object.values(statusMap).forEach(s => newBadge.classList.remove(s.class));
+                            newBadge.classList.add(newStatusInfo.class);
+                            newBadge.innerHTML = `<i class="fa-solid fa-circle"></i> ${newStatusInfo.label}`;
+                        }
+                        updateCampaignActionButtons(row);
+                    }
+                } catch (error) {
+                    console.error('Erreur lors de l\'appel API:', error);
+                    await Swal.fire('Erreur', 'Une erreur est survenue lors de l\'opération. Veuillez réessayer plus tard.', 'error');
                 }
-            } else {
-                await Swal.fire('Erreur', 'Une erreur est survenue.', 'error');
             }
         }
-    }
 
-    // Gestion des clics sur les boutons d'action du menu
-    document.getElementById('campaigns-table').addEventListener('click', function(e) {
-        const button = e.target.closest('.campaign-action-btn:not(.is-disabled)');
-        if (button) {
-            handleCampaignAction(button);
-        }
+        document.getElementById('campaigns-table').addEventListener('click', function(e) {
+            const button = e.target.closest('.campaign-action-btn:not(.is-disabled)');
+            if (button) {
+                handleCampaignAction(button);
+            }
+        });
     });
-});
 </script>
 @endsection

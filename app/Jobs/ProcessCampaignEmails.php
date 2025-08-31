@@ -58,6 +58,14 @@ class ProcessCampaignEmails implements ShouldQueue
             return;
         }
 
+        // Récupérer tous les serveurs SMTP actifs associés à la campagne.
+        $smtpServers = $campaign->smtpServers;
+        if ($smtpServers->isEmpty()) {
+            $campaign->update(['status' => 'failed']);
+            Log::error("Campaign ID {$campaign->id} failed: No active SMTP servers associated.");
+            return;
+        }
+
         try {
             $contactsToSend = Contact::where('campaign_id', $campaign->id)
                 ->whereDoesntHave('emailLogs', function ($query) use ($campaign) {
@@ -67,17 +75,10 @@ class ProcessCampaignEmails implements ShouldQueue
                 ->whereNotIn('email', Blacklist::pluck('email')->toArray())
                 ->get();
 
-            // Get the first active SMTP server associated with the campaign
-            $smtpServer = $campaign->smtpServers->first();
-            if (!$smtpServer) {
-                $campaign->update(['status' => 'failed']);
-                Log::error("Campaign ID {$campaign->id} failed: No active SMTP server associated.");
-                return;
-            }
-
             $totalContacts = $contactsToSend->count();
             $processedCount = 0;
             $progressUpdateStep = max(1, (int)($totalContacts / 100));
+            $smtpServerIndex = 0;
 
             foreach ($contactsToSend as $contact) {
                 $campaign->refresh();
@@ -86,35 +87,56 @@ class ProcessCampaignEmails implements ShouldQueue
                     return;
                 }
 
-                $emailLog = null;
-                try {
-                    // Create a pending entry in the email log
-                    $emailLog = EmailLog::create([
-                        'campaign_id' => $campaign->id,
-                        'contact_id' => $contact->id,
-                        'status' => 'pending',
-                        'smtp_server_id' => $smtpServer->id,
-                    ]);
+                $emailSent = false;
+                $attempts = 0;
+                $maxAttempts = $smtpServers->count();
 
-                    // Prepare all necessary parameters for the remote API
-                    $emailData = $this->prepareEmailDataForApi($campaign, $contact, $emailLog);
+                // Crée une seule entrée de journal pour ce contact avant de tenter l'envoi
+                $emailLog = EmailLog::create([
+                    'campaign_id' => $campaign->id,
+                    'contact_id' => $contact->id,
+                    'status' => 'pending',
+                    'smtp_server_id' => null, // Initialisé sans serveur
+                ]);
 
-                    // Send data to the remote API and handle the response
-                    $response = $this->sendToRemoteEmailApi($emailData, $smtpServer->api_endpoint, $smtpServer->api_key);
+                // Boucle de failover pour essayer tous les serveurs disponibles
+                while (!$emailSent && $attempts < $maxAttempts) {
+                    $smtpServer = $smtpServers->get($smtpServerIndex);
 
-                    if ($response['success']) {
-                        $emailLog->update(['status' => 'sent', 'sent_at' => now()]);
-                        Log::info("Email dispatch request successful for {$contact->email}, status set to 'sent'.");
-                    } else {
-                        $emailLog->update(['status' => 'failed']);
-                        Log::error("Email dispatch request failed for {$contact->email}: " . $response['message']);
+                    try {
+                        // Prépare les données de l'email
+                        $emailData = $this->prepareEmailDataForApi($campaign, $contact, $emailLog);
+
+                        // Met à jour le journal avec le serveur SMTP actuel
+                        $emailLog->update(['smtp_server_id' => $smtpServer->id]);
+
+                        // Envoi de l'email via le serveur API
+                        $response = $this->sendToRemoteEmailApi($emailData, $smtpServer->api_endpoint, $smtpServer->api_key);
+
+                        if ($response['success']) {
+                            $emailLog->update(['status' => 'sent', 'sent_at' => now()]);
+                            Log::info("Email dispatch request successful for {$contact->email} via server {$smtpServer->id}.");
+                            $emailSent = true;
+                        } else {
+                            $emailLog->update(['status' => 'failed', 'error_message' => $response['message']]);
+                            Log::error("Email dispatch request failed for {$contact->email} via server {$smtpServer->id}: " . $response['message']);
+                        }
+
+                    } catch (\Exception $e) {
+                        $emailLog->update(['status' => 'failed', 'error_message' => $e->getMessage(), 'smtp_server_id' => $smtpServer->id]);
+                        Log::error("API request failed for {$contact->email} via server {$smtpServer->id}: " . $e->getMessage());
                     }
 
-                } catch (\Exception $e) {
-                    if ($emailLog) {
-                        $emailLog->update(['status' => 'failed']);
+                    // On passe au serveur suivant si l'envoi a échoué
+                    if (!$emailSent) {
+                        $smtpServerIndex = ($smtpServerIndex + 1) % $smtpServers->count();
+                        $attempts++;
                     }
-                    Log::error("API request failed for {$contact->email}: " . $e->getMessage());
+                }
+
+                // Si l'email n'a pas pu être envoyé après toutes les tentatives
+                if (!$emailSent) {
+                    Log::error("All SMTP server attempts failed for {$contact->email}. Skipping contact.");
                 }
 
                 $processedCount++;

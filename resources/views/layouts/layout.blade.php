@@ -200,6 +200,84 @@
         transform-origin: bottom right; /* On change l'origine de l'animation */
     }
 </style>
+<style>
+    /* Composant d'alerte pour les erreurs */
+    .alert {
+        display: flex; align-items: flex-start; gap: 14px; padding: 16px;
+        border-radius: var(--r); border: 1px solid transparent; margin-bottom: 20px;
+    }
+    .alert-danger {
+        background-color: rgba(239, 68, 68, 0.08); border-color: rgba(239, 68, 68, 0.3); color: #fecaca;
+    }
+    .alert-danger i { font-size: 18px; padding-top: 2px; color: var(--danger); }
+    [data-theme="light"] .alert-danger { background-color: #fef2f2; color: #991b1b; }
+
+    /* Composant Interrupteur (Toggle Switch) pour le checkbox "Activer" */
+    .toggle-switch { position: relative; display: inline-block; width: 48px; height: 26px; }
+    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .slider {
+        position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+        background-color: var(--border); transition: .4s; border-radius: 26px;
+    }
+    .slider:before {
+        position: absolute; content: ""; height: 20px; width: 20px; left: 3px; bottom: 3px;
+        background-color: white; transition: .4s; border-radius: 50%;
+    }
+    input:checked + .slider { background-color: var(--ok); }
+    input:focus + .slider { box-shadow: 0 0 1px var(--ok); }
+    input:checked + .slider:before { transform: translateX(22px); }
+
+    /* Conteneur pour les boutons du formulaire */
+    .form-actions {
+        grid-column: 1 / -1; display: flex; gap: 10px; margin-top: 20px;
+        padding-top: 20px; border-top: 1px solid var(--border);
+    }
+</style>
+
+<style>
+    /* Styles spécifiques à cette page */
+    .table-responsive-wrapper { overflow-x: auto; }
+    .table-actions, .table-actions-header { text-align: center !important; width: 50px; }
+
+    /* Badges de statut */
+    .badge.status-active {
+        background: radial-gradient(circle, rgba(34,197,94,0.2), transparent 70%);
+        border-color: var(--ok); color: var(--ok);
+    }
+    .badge.status-inactive {
+        background: radial-gradient(circle, rgba(156,163,175,0.2), transparent 70%);
+        border-color: var(--muted); color: var(--muted);
+    }
+    .badge i { margin-right: 4px; font-size: 11px; }
+
+    /* Styles du Dropdown (cohérents avec les autres pages) */
+    .dropdown-actions { position: relative; display: inline-block; }
+    .dropdown-toggle {
+        background: transparent; border: none; color: var(--muted); cursor: pointer;
+        padding: 8px; border-radius: 50%; width: 32px; height: 32px; transition: background .2s;
+    }
+    .dropdown-toggle:hover { background: rgba(255,255,255,0.05); color: var(--text); }
+   
+    .dropdown-menu.show { display: block; }
+    .dropdown-item {
+        color: var(--text); padding: 8px 12px; text-decoration: none; display: flex; align-items: center;
+        gap: 10px; background: none; border: none; width: 100%; text-align: left;
+        cursor: pointer; transition: background-color 0.2s; border-radius: 8px;
+    }
+    .dropdown-item i { width: 16px; text-align: center; opacity: .7; }
+    .dropdown-item:hover { background-color: rgba(59,130,246,.15); color: #c7d2fe; }
+    .dropdown-item.danger:hover { background-color: rgba(239,68,68,.15); color: #fecaca; }
+    .dropdown-divider { height: 1px; background-color: var(--border); margin: 6px 0; }
+
+    /* Styles pour DataTables (thème) */
+    .dataTables_wrapper .dataTables_length select, .dataTables_wrapper .dataTables_filter input { background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 6px 8px; }
+    .dataTables_wrapper .dataTables_paginate .paginate_button { color: var(--text) !important; }
+    .dataTables_wrapper .dataTables_paginate .paginate_button.current, .dataTables_wrapper .dataTables_paginate .paginate_button.current:hover { background: var(--pri) !important; color: white !important; border-color: var(--pri-2) !important; }
+    .dataTables_wrapper .dataTables_info, .dataTables_wrapper .dataTables_length, .dataTables_wrapper .dataTables_filter { color: var(--muted); }
+    table.dataTable tbody tr:hover { background-color: rgba(255,255,255,0.02); }
+    table.dataTable td { padding: 12px 14px; }
+</style>
+
 </head>
 <body>
   <div class="layout">

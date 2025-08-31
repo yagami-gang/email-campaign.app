@@ -1,14 +1,16 @@
 <?php
 
-use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\ProfileController;
 
+use App\Http\Controllers\TrackingController;
 use App\Http\Controllers\MailingListController;
-use App\Http\Controllers\Admin\TemplateController;
 
 use App\Http\Controllers\Admin\CampaignController;
-use App\Http\Controllers\Admin\SmtpServerController;
+use App\Http\Controllers\Admin\TemplateController;
 use App\Http\Controllers\Admin\BlacklistController;
+use App\Http\Controllers\Admin\StatisticController;
+use App\Http\Controllers\Admin\SmtpServerController;
 
 Route::get('/', function () {
     return redirect()->route('admin.campaigns.index');
@@ -40,12 +42,6 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
         return view('dashboard');
     })->name('dashboard');
 
-    // Route pour l'import
-    Route::post('/admin/mailing-lists/import', [MailingListController::class, 'import'])->name('admin.mailing_lists.import');
-
-    // Nouvelle route pour récupérer la progression
-    Route::get('/admin/mailing-lists/{id}/progress', [MailingListController::class, 'getImportProgress'])->name('admin.mailing_lists.progress');
-
     // Routes de ressources pour les templates (CRUD)
     Route::resource('templates', TemplateController::class);
 
@@ -62,7 +58,8 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     Route::post('campaigns/{campaign}/launch', [CampaignController::class, 'launch'])->name('campaigns.launch');
     Route::post('campaigns/{campaign}/pause', [CampaignController::class, 'pause'])->name('campaigns.pause');
     Route::post('campaigns/{campaign}/resume', [CampaignController::class, 'resume'])->name('campaigns.resume');
-    
+    Route::delete('campaigns/{campaign}/delete', [CampaignController::class, 'destroy'])->name('campaigns.destroy');
+
     // Nouvelle route pour récupérer la progression d'envoi d'une campagne
     Route::get('campaigns/{id}/progress', [CampaignController::class, 'getSendProgress'])->name('campaigns.progress');
 

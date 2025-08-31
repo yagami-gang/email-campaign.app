@@ -45,45 +45,34 @@ class CampaignController extends Controller
 
     /**
      * Stocke une nouvelle campagne dans la base de données.
-     * Cette méthode gère la création initiale et l'association des serveurs API et des listes de diffusion.
      *
      * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\RedirectResponse|\Illuminate\Http\JsonResponse
      */
     public function store(Request $request)
     {
-        // Validation des données de la première étape
         $validatedData = $request->validate([
             'name' => 'required|string|max:255',
             'subject' => 'required|string|max:255',
             'template_id' => 'required|exists:templates,id',
-            'smtp_server_ids' => 'required|array',
-            'smtp_server_ids.*' => 'exists:smtp_servers,id',
-            'mailing_list_ids' => 'required|array',
-            'mailing_list_ids.*' => 'exists:mailing_lists,id',
         ]);
 
         try {
-            // Créer la campagne avec le statut 'draft'
+            // Créer la campagne avec le statut 'pending'
             $campaign = Campaign::create([
                 'name' => $validatedData['name'],
                 'subject' => $validatedData['subject'],
                 'template_id' => $validatedData['template_id'],
-                'status' => 'draft',
+                'status' => 'pending',
                 'progress' => 0,
-                'nbre_contacts' => 0, // Initialisé à 0, sera mis à jour par le job d'import
+                'nbre_contacts' => 0,
             ]);
-
-            // Attacher les serveurs API et les listes de diffusion à la campagne
-            $campaign->smtpServers()->sync($validatedData['smtp_server_ids']);
-            $campaign->mailingLists()->sync($validatedData['mailing_list_ids']);
 
         } catch (Exception $e) {
             Log::error("Erreur lors de la création de la campagne: " . $e->getMessage());
             return redirect()->back()->withInput()->with('error', 'Erreur lors de la création de la campagne : ' . $e->getMessage());
         }
 
-        // Redirection vers la page d'édition pour l'importation du fichier JSON
         return redirect()
             ->route('admin.campaigns.edit', $campaign->id)
             ->with('status', 'La campagne a été créée. Importez le fichier JSON pour ajouter les contacts.');
@@ -111,7 +100,6 @@ class CampaignController extends Controller
 
     /**
      * Met à jour une campagne existante dans la base de données.
-     * Cette méthode gère uniquement l'importation du fichier JSON.
      *
      * @param  \Illuminate\Http\Request  $request
      * @param  \App\Models\Campaign  $campaign
@@ -119,7 +107,6 @@ class CampaignController extends Controller
      */
     public function update(Request $request, Campaign $campaign)
     {
-        // 1. Validation de la requête
         try {
             $request->validate([
                 'json_file' => 'required|file|mimes:json',
@@ -128,14 +115,13 @@ class CampaignController extends Controller
             return response()->json(['error' => 'Fichier JSON requis.'], 422);
         }
 
-        if ($campaign->status !== 'draft') {
-            return response()->json(['error' => 'Impossible de modifier une campagne qui n\'est pas un brouillon.'], 403);
+        // Vérifier que la campagne est bien en statut 'pending' pour être mise à jour
+        if ($campaign->status !== 'pending') {
+            return response()->json(['error' => 'Impossible de modifier une campagne qui n\'est pas en attente.'], 403);
         }
 
-        // 2. Déplacement du fichier pour le job
         $filePath = $request->file('json_file')->store('imports');
 
-        // 3. Obtenir le nombre total de contacts
         $totalContacts = 0;
         try {
             $stream = Storage::disk('local')->readStream($filePath);
@@ -146,10 +132,8 @@ class CampaignController extends Controller
             $totalContacts = 0;
         }
 
-        // Mettre à jour le nombre de contacts sur la campagne
-        $campaign->update(['nbre_contacts' => $totalContacts]);
+        $campaign->update(['nbre_contacts' => $totalContacts, 'status' => 'pending']);
 
-        // 4. Dispatch du job pour le traitement en arrière-plan
         ProcessCampaignImport::dispatch($campaign->id, $filePath);
 
         Log::info("Job d'importation de contacts déclenché pour la campagne ID {$campaign->id}.");
@@ -181,9 +165,7 @@ class CampaignController extends Controller
      */
     public function launch(Campaign $campaign, Request $request)
     {
-        // Validation : S'assurer que la campagne est prête à être lancée
-        if ($campaign->status === 'pending' || $campaign->status === 'paused' || $campaign->status === 'draft') {
-            // Vérifier que des serveurs API et des contacts sont bien associés
+        if ($campaign->status === 'pending' || $campaign->status === 'paused') {
             if ($campaign->smtpServers->isEmpty() || $campaign->contacts->isEmpty()) {
                 $errorMessage = 'Impossible de lancer la campagne : elle doit avoir au moins un serveur API et des contacts associés.';
                 if ($request->expectsJson()) {
@@ -202,7 +184,7 @@ class CampaignController extends Controller
                     'campaign_id' => $campaign->id,
                     'status' => $campaign->status,
                     'progress' => $campaign->progress
-                ], 202); // 202 Accepted
+                ], 202);
             }
 
             return redirect()->back()->with('success', $message);
@@ -262,7 +244,7 @@ class CampaignController extends Controller
                     'campaign_id' => $campaign->id,
                     'status' => $campaign->status,
                     'progress' => $campaign->progress
-                ], 202); // 202 Accepted
+                ], 202);
             }
             return redirect()->back()->with('success', $message);
         }
@@ -275,7 +257,6 @@ class CampaignController extends Controller
 
     /**
      * Récupère le statut et la progression d'une campagne.
-     * Cette méthode sera appelée par le frontend pour mettre à jour la barre de progression.
      */
     public function getSendProgress(int $id): \Illuminate\Http\JsonResponse
     {

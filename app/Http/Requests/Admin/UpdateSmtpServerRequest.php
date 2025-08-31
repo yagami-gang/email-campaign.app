@@ -32,12 +32,7 @@ class UpdateSmtpServerRequest extends FormRequest
         return [
             // Le nom doit être unique SAUF pour le serveur que nous sommes en train de modifier
             'name' => ['required', 'string', 'max:255', Rule::unique('smtp_servers')->ignore($smtpServerId)],
-            'host' => 'required|string|max:255',
-            'port' => 'required|integer|min:1|max:65535',
-            // Le mot de passe n'est pas obligatoire pour la mise à jour (l'utilisateur peut le laisser vide pour ne pas le changer)
-            'password' => 'nullable|string|max:255',
-            'username' => 'required|string|max:255',
-            'encryption' => 'nullable|string|in:tls,ssl',
+            'url' => 'required|string|max:255',
             'is_active' => 'boolean',
         ];
     }
