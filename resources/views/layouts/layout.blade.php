@@ -126,7 +126,80 @@
     .dropdown[open] summary{background:linear-gradient(180deg,rgba(59,130,246,.18),rgba(59,130,246,.06)); border:1px solid var(--border)}
     .submenu{padding-left:8px; margin-top:6px}
     .submenu a{padding-left:28px}
-  </style>
+
+    /* Styles spécifiques à la page, utilisant les variables du layout */
+
+    /* Statuts des campagnes avec des couleurs thématiques */
+    .badge.status-draft, .badge.status-scheduled {
+        background: radial-gradient(circle, rgba(156,163,175,0.2), transparent 70%);
+        border-color: var(--muted);
+        color: var(--muted);
+    }
+    .badge.status-running { background: radial-gradient(circle, rgba(59,130,246,0.2), transparent 70%); border-color:var(--pri); color:var(--pri); }
+    .badge.status-paused { background: radial-gradient(circle, rgba(245,158,11,0.2), transparent 70%); border-color:var(--warn); color:var(--warn); }
+    .badge.status-completed { background: radial-gradient(circle, rgba(34,197,94,0.2), transparent 70%); border-color:var(--ok); color:var(--ok); }
+    .badge.status-failed { background: radial-gradient(circle, rgba(239,68,68,0.2), transparent 70%); border-color:var(--danger); color:var(--danger); }
+    .badge .fa-circle { font-size: 8px; margin-right: 4px; }
+
+    /* Barre de progression */
+    .progress-container { display: flex; align-items: center; gap: 8px; min-width: 120px; }
+    .progress-bar { flex-grow: 1; height: 6px; background-color: var(--border); border-radius: 3px; overflow: hidden; }
+    .progress-value { height: 100%; background-color: var(--pri); border-radius: 3px; transition: width 0.4s ease-in-out; }
+    .progress-text { font-size: 12px; color: var(--muted); }
+
+    /* Dropdown d'actions */
+    .dropdown-actions { position: relative; display: inline-block; }
+    .dropdown-toggle {
+        background: transparent; border: none; color: var(--muted); cursor: pointer;
+        padding: 8px; border-radius: 50%; width: 32px; height: 32px; transition: background .2s;
+    }
+    .dropdown-toggle:hover { background: rgba(255,255,255,0.05); color: var(--text); }
+    .dropdown-menu {
+        display: none; position: relative; right: 0; top: 110%;
+        background-color: var(--sidebar); min-width: 180px; box-shadow: var(--shadow);
+        z-index: 1000; border-radius: var(--r-sm); border: 1px solid var(--border);
+        overflow: hidden; padding: 6px;
+        transform: scale(0.95);
+    opacity: 0;
+    transition: transform 0.1s ease-out, opacity 0.1s ease-out;
+    transform-origin: top right;
+    pointer-events: none; /* Empêche l'interaction quand il est caché */
+    }
+    .dropdown-menu.show {
+        display: block;
+        transform: scale(1);
+        opacity: 1;
+        pointer-events: auto; /* Autorise l'interaction quand il est visible */
+    }
+    .dropdown-item {
+        color: var(--text); padding: 8px 12px; text-decoration: none; display: flex; align-items: center;
+        gap: 10px; background: none; border: none; width: 100%; text-align: left;
+        cursor: pointer; transition: background-color 0.2s; border-radius: 8px;
+    }
+    .dropdown-item i { width: 16px; text-align: center; opacity: .7; }
+    .dropdown-item:hover { background-color: rgba(59,130,246,.15); color: #c7d2fe; }
+    .dropdown-item.danger:hover { background-color: rgba(239,68,68,.15); color: #fecaca; }
+    .dropdown-item.is-disabled { color: var(--muted) !important; cursor: not-allowed; background: none !important; opacity: .5; }
+    .dropdown-divider { height: 1px; background-color: var(--border); margin: 6px 0; }
+
+    /* Ajustements pour DataTables avec le thème */
+    .dataTables_wrapper .dataTables_length select,
+    .dataTables_wrapper .dataTables_filter input {
+        background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: var(--r-sm); padding: 6px 8px;
+    }
+    .dataTables_wrapper .dataTables_paginate .paginate_button { color: var(--text) !important; }
+    .dataTables_wrapper .dataTables_paginate .paginate_button.current,
+    .dataTables_wrapper .dataTables_paginate .paginate_button.current:hover { background: var(--pri) !important; color: white !important; border-color: var(--pri-2) !important; }
+    .dataTables_wrapper .dataTables_info, .dataTables_wrapper .dataTables_length, .dataTables_wrapper .dataTables_filter { color: var(--muted); }
+    table.dataTable tbody tr:hover { background-color: rgba(255,255,255,0.02); }
+    table.dataTable td { padding: 12px 14px; }
+    .dropdown-menu.drop-up {
+        top: auto; /* On annule la position par défaut */
+        bottom: 100%; /* On le place au-dessus du bouton */
+        margin-bottom: 6px; /* Un petit espace */
+        transform-origin: bottom right; /* On change l'origine de l'animation */
+    }
+</style>
 </head>
 <body>
   <div class="layout">

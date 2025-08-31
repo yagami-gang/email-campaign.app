@@ -7,8 +7,6 @@ use App\Models\Campaign;
 use App\Models\Template;
 use App\Models\SmtpServer;
 use App\Models\MailingList;
-use App\Http\Requests\Admin\StoreCampaignRequest;
-use App\Http\Requests\Admin\UpdateCampaignRequest;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -16,6 +14,11 @@ use App\Jobs\ProcessCampaignEmails;
 use Illuminate\Support\Facades\Response;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
+use Exception;
+use App\Jobs\ProcessCampaignImport;
+use Illuminate\Validation\ValidationException;
+use JsonMachine\Items;
+use Illuminate\Support\Facades\Storage;
 
 class CampaignController extends Controller
 {
@@ -24,7 +27,7 @@ class CampaignController extends Controller
      */
     public function index()
     {
-        $campaigns = Campaign::with(['template', 'smtpServers'])->get();
+        $campaigns = Campaign::with(['template', 'smtpServers', 'mailingLists'])->get();
         return view('pages.campaigns.index', compact('campaigns'));
     }
 
@@ -42,26 +45,48 @@ class CampaignController extends Controller
 
     /**
      * Stocke une nouvelle campagne dans la base de données.
+     * Cette méthode gère la création initiale et l'association des serveurs API et des listes de diffusion.
      *
-     * @param  \App\Http\Requests\Admin\StoreCampaignRequest  $request
+     * @param  \Illuminate\Http\Request  $request
      * @return \Illuminate\Http\RedirectResponse|\Illuminate\Http\JsonResponse
      */
-    public function store(StoreCampaignRequest $request)
+    public function store(Request $request)
     {
-        $validated = $request->validated();
-
-        $campaign = Campaign::create([
-            'name'          => $validated['name'],
-            'subject'       => $validated['subject'],
-            'template_id'   => $validated['template_id'],
-            'status'        => 'pending',
-            'progress'      => 0,
-            'nbre_contacts' => 0, // Sera mis à jour lors de l'importation de la mailing list
+        // Validation des données de la première étape
+        $validatedData = $request->validate([
+            'name' => 'required|string|max:255',
+            'subject' => 'required|string|max:255',
+            'template_id' => 'required|exists:templates,id',
+            'smtp_server_ids' => 'required|array',
+            'smtp_server_ids.*' => 'exists:smtp_servers,id',
+            'mailing_list_ids' => 'required|array',
+            'mailing_list_ids.*' => 'exists:mailing_lists,id',
         ]);
 
+        try {
+            // Créer la campagne avec le statut 'draft'
+            $campaign = Campaign::create([
+                'name' => $validatedData['name'],
+                'subject' => $validatedData['subject'],
+                'template_id' => $validatedData['template_id'],
+                'status' => 'draft',
+                'progress' => 0,
+                'nbre_contacts' => 0, // Initialisé à 0, sera mis à jour par le job d'import
+            ]);
+
+            // Attacher les serveurs API et les listes de diffusion à la campagne
+            $campaign->smtpServers()->sync($validatedData['smtp_server_ids']);
+            $campaign->mailingLists()->sync($validatedData['mailing_list_ids']);
+
+        } catch (Exception $e) {
+            Log::error("Erreur lors de la création de la campagne: " . $e->getMessage());
+            return redirect()->back()->withInput()->with('error', 'Erreur lors de la création de la campagne : ' . $e->getMessage());
+        }
+
+        // Redirection vers la page d'édition pour l'importation du fichier JSON
         return redirect()
             ->route('admin.campaigns.edit', $campaign->id)
-            ->with('status', 'La campagne a été créée. Complétez la configuration des serveurs SMTP et des listes de diffusion.');
+            ->with('status', 'La campagne a été créée. Importez le fichier JSON pour ajouter les contacts.');
     }
 
     /**
@@ -69,7 +94,7 @@ class CampaignController extends Controller
      */
     public function show(Campaign $campaign)
     {
-          return view('pages.campaigns.show', compact('campaign'));
+        return view('pages.campaigns.show', compact('campaign'));
     }
 
     /**
@@ -81,76 +106,58 @@ class CampaignController extends Controller
         $smtpServers = SmtpServer::where('is_active', true)->get();
         $mailingLists = MailingList::all();
 
-        $selectedSmtpServers = $campaign->smtpServers->pluck('id')->toArray();
-
-        return view('pages.campaigns.edit', compact('campaign', 'templates', 'smtpServers', 'mailingLists', 'selectedSmtpServers'));
+        return view('pages.campaigns.edit', compact('campaign', 'templates', 'smtpServers', 'mailingLists'));
     }
 
     /**
      * Met à jour une campagne existante dans la base de données.
+     * Cette méthode gère uniquement l'importation du fichier JSON.
      *
-     * @param  \App\Http\Requests\Admin\UpdateCampaignRequest  $request
+     * @param  \Illuminate\Http\Request  $request
      * @param  \App\Models\Campaign  $campaign
-     * @return \Illuminate\Http\RedirectResponse|\Illuminate\Http\JsonResponse
+     * @return \Illuminate\Http\JsonResponse
      */
-    public function update(UpdateCampaignRequest $request, Campaign $campaign)
+    public function update(Request $request, Campaign $campaign)
     {
-        $data = $request->validated();
-
-        // Normalisation: transforme "" en null sur les champs pivot
-        $smtpRows = collect($data['smtp_rows'] ?? [])->map(function(array $row){
-            foreach (['sender_name','sender_email','send_frequency_minutes','max_daily_sends','scheduled_at','status','progress','nbre_contacts'] as $k) {
-                if (array_key_exists($k, $row) && $row[$k] === '') {
-                    $row[$k] = null;
-                }
-            }
-            return $row;
-        });
-
-        DB::transaction(function () use ($campaign, $data, $smtpRows) {
-            // 1) Mettre à jour la campagne
-            $campaign->update([
-                'name'          => $data['name'],
-                'subject'       => $data['subject'],
-                'template_id'   => $data['template_id'],
+        // 1. Validation de la requête
+        try {
+            $request->validate([
+                'json_file' => 'required|file|mimes:json',
             ]);
-
-            // 2) Préparer le tableau pour sync()
-            //    Format attendu: [ smtp_server_id => [pivotCols...] ]
-            $sync = [];
-            foreach ($smtpRows as $row) {
-                $sync[(int)$row['smtp_server_id']] = [
-                    'sender_name'               => $row['sender_name'] ?? null,
-                    'sender_email'              => $row['sender_email'] ?? null,
-                    'send_frequency_minutes'    => $row['send_frequency_minutes'] ?? null,
-                    'max_daily_sends'           => $row['max_daily_sends'] ?? null,
-                    'scheduled_at'              => $row['scheduled_at'] ?? null,
-                    'status'                    => $row['status'] ?? null,
-                    'progress'                  => $row['progress'] ?? null,
-                    'nbre_contacts'             => $row['nbre_contacts'] ?? null,
-                ];
-            }
-
-            // 3) Sync complet (ajoute, met à jour, supprime ce qui n'est plus présent)
-            $campaign->smtpServers()->sync($sync);
-        });
-
-        if ($request->expectsJson()) {
-            return response()->json([
-                'message' => 'Campagne mise à jour avec succès.',
-                'campaign_id' => $campaign->id,
-                'pivot_count' => $campaign->smtpServers()->count(),
-            ]);
+        } catch (ValidationException $e) {
+            return response()->json(['error' => 'Fichier JSON requis.'], 422);
         }
 
-        return back()->with('status', 'Campagne et liaisons SMTP mises à jour.');
+        if ($campaign->status !== 'draft') {
+            return response()->json(['error' => 'Impossible de modifier une campagne qui n\'est pas un brouillon.'], 403);
+        }
+
+        // 2. Déplacement du fichier pour le job
+        $filePath = $request->file('json_file')->store('imports');
+
+        // 3. Obtenir le nombre total de contacts
+        $totalContacts = 0;
+        try {
+            $stream = Storage::disk('local')->readStream($filePath);
+            $contacts = Items::fromStream($stream);
+            $totalContacts = iterator_count($contacts);
+        } catch (\Exception $e) {
+            Log::error("Échec de la lecture du fichier pour compter les contacts: " . $e->getMessage());
+            $totalContacts = 0;
+        }
+
+        // Mettre à jour le nombre de contacts sur la campagne
+        $campaign->update(['nbre_contacts' => $totalContacts]);
+
+        // 4. Dispatch du job pour le traitement en arrière-plan
+        ProcessCampaignImport::dispatch($campaign->id, $filePath);
+
+        Log::info("Job d'importation de contacts déclenché pour la campagne ID {$campaign->id}.");
+        return response()->json(['message' => 'L\'importation des contacts a été mise en file d\'attente et sera traitée en arrière-plan.'], 202);
     }
 
     /**
      * Supprime une campagne de la base de données.
-     *
-     * @param  \App\Models\Campaign  $campaign
-     * @return \Illuminate\Http\RedirectResponse|\Illuminate\Http\JsonResponse
      */
     public function destroy(Campaign $campaign, Request $request)
     {
@@ -171,17 +178,24 @@ class CampaignController extends Controller
 
     /**
      * Action pour lancer une campagne.
-     * Met à jour le statut et dispatche le Job d'envoi d'emails.
-     *
-     * @param Campaign $campaign
-     * @return \Illuminate\Http\RedirectResponse|\Illuminate\Http\JsonResponse
      */
     public function launch(Campaign $campaign, Request $request)
     {
-        if ($campaign->status === 'pending' || $campaign->status === 'paused') {
+        // Validation : S'assurer que la campagne est prête à être lancée
+        if ($campaign->status === 'pending' || $campaign->status === 'paused' || $campaign->status === 'draft') {
+            // Vérifier que des serveurs API et des contacts sont bien associés
+            if ($campaign->smtpServers->isEmpty() || $campaign->contacts->isEmpty()) {
+                $errorMessage = 'Impossible de lancer la campagne : elle doit avoir au moins un serveur API et des contacts associés.';
+                if ($request->expectsJson()) {
+                    return Response::json(['error' => $errorMessage], 400);
+                }
+                return redirect()->back()->with('error', $errorMessage);
+            }
+
             $campaign->update(['status' => 'active', 'progress' => 0]);
             ProcessCampaignEmails::dispatch($campaign->id);
             $message = 'La campagne a été lancée et est maintenant active. Les emails seront envoyés en arrière-plan.';
+
             if ($request->expectsJson()) {
                 return Response::json([
                     'message' => $message,
@@ -190,8 +204,10 @@ class CampaignController extends Controller
                     'progress' => $campaign->progress
                 ], 202); // 202 Accepted
             }
+
             return redirect()->back()->with('success', $message);
         }
+
         $message = 'La campagne ne peut pas être lancée dans son état actuel.';
         if ($request->expectsJson()) {
             return Response::json(['error' => $message], 400);
@@ -201,9 +217,6 @@ class CampaignController extends Controller
 
     /**
      * Action pour mettre en pause une campagne.
-     *
-     * @param Campaign $campaign
-     * @return \Illuminate\Http\RedirectResponse|\Illuminate\Http\JsonResponse
      */
     public function pause(Campaign $campaign, Request $request)
     {
@@ -229,13 +242,17 @@ class CampaignController extends Controller
 
     /**
      * Action pour reprendre une campagne.
-     *
-     * @param Campaign $campaign
-     * @return \Illuminate\Http\RedirectResponse|\Illuminate\Http\JsonResponse
      */
     public function resume(Campaign $campaign, Request $request)
     {
         if ($campaign->status === 'paused') {
+            if ($campaign->smtpServers->isEmpty() || $campaign->contacts->isEmpty()) {
+                $errorMessage = 'Impossible de reprendre la campagne : elle doit avoir au moins un serveur API et des contacts associés.';
+                if ($request->expectsJson()) {
+                    return Response::json(['error' => $errorMessage], 400);
+                }
+                return redirect()->back()->with('error', $errorMessage);
+            }
             $campaign->update(['status' => 'active']);
             ProcessCampaignEmails::dispatch($campaign->id);
             $message = 'La campagne a été reprise et est maintenant active. Les emails reprendront leur envoi en arrière-plan.';
@@ -259,9 +276,6 @@ class CampaignController extends Controller
     /**
      * Récupère le statut et la progression d'une campagne.
      * Cette méthode sera appelée par le frontend pour mettre à jour la barre de progression.
-     *
-     * @param int $id L'ID de la campagne.
-     * @return \Illuminate\Http\JsonResponse
      */
     public function getSendProgress(int $id): \Illuminate\Http\JsonResponse
     {

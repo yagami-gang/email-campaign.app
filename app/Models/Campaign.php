@@ -93,4 +93,27 @@ class Campaign extends Model
     {
         return $this->hasMany(ShortUrl::class);
     }
+    /**
+     * Obtenir les listes de diffusion associées à la campagne.
+     * Une campagne peut cibler plusieurs listes de diffusion.
+     */
+    public function mailingLists(): BelongsToMany
+    {
+        return $this->belongsToMany(MailingList::class, 'campaign_mailing_list');
+    }
+
+    /**
+     * Obtenir les contacts associés à la campagne via les listes de diffusion.
+     */
+    public function contacts()
+    {
+        return $this->hasManyThrough(
+            Contact::class,
+            MailingListContact::class,
+            'mailing_list_id',
+            'id',
+            'id',
+            'contact_id'
+        )->whereIn('mailing_list_contacts.mailing_list_id', $this->mailingLists->pluck('id'));
+    }
 }

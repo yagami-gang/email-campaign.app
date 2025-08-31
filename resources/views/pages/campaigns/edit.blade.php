@@ -24,7 +24,7 @@
 
   <div class="card">
     {{-- Formulaire unique pour la création et l'édition --}}
-    <form method="POST" action="{{ isset($campaign) ? route('admin.campaigns.update', $campaign->id) : route('admin.campaigns.store') }}">
+    <form method="POST" action="{{ isset($campaign) ? route('admin.campaigns.update', $campaign->id) : route('admin.campaigns.store') }}" enctype="multipart/form-data">
       @csrf
       @if(isset($campaign))
         @method('PUT')
@@ -53,27 +53,25 @@
         </div>
 
         <div class="field">
-          <label for="nbre_contacts"> Nombre limite de shoot</label>
+          <label for="nbre_contacts"> Nombre limite de contacts</label>
           <input id="nbre_contacts" name="nbre_contacts" type="text" value="{{ old('nbre_contacts', $campaign->nbre_contacts ?? '') }}" required>
         </div>
       </div>
 
       <hr style="margin:24px 0;border-color:var(--border)">
 
-      {{-- ====== SECTION 2 : Lignes pivot (serveurs SMTP + paramètres) ====== --}}
-      <h3 style="margin-top:0"><i class="fa-solid fa-server"></i> Serveurs SMTP & paramètres d’envoi</h3>
+      {{-- ====== SECTION 2 : Lignes pivot (URL d'API + paramètres) ====== --}}
+      <h3 style="margin-top:0"><i class="fa-solid fa-server"></i> URLs d'API & paramètres d’envoi</h3>
       <div class="hint" style="margin-bottom:8px">
-        Associez un ou plusieurs serveurs SMTP à cette campagne. Chaque ligne ci-dessous alimente la table
-        <code>campaign_smtp_server</code> avec ses propres paramètres (expéditeur, fréquence, etc.).
+        Associez une ou plusieurs URLs d'API à cette campagne. Chaque ligne ci-dessous alimente la table
+        <code>campaign_api_url</code> avec ses propres paramètres (fréquence, date de départ, etc.).
       </div>
 
       <div style="overflow:auto">
         <table class="display" style="width:100%;min-width:980px">
           <thead>
             <tr>
-              <th>Serveur SMTP</th>
-              <th>Nom expéditeur</th>
-              <th>Email expéditeur</th>
+              <th>URL d'API</th>
               <th>Freq (min)</th>
               <th>Max/jour</th>
               <th>Départ</th>
@@ -82,12 +80,9 @@
           </thead>
           <tbody id="smtpRows">
             @php
-              // Utilisation de l'opérateur null-safe pour éviter l'erreur
               $smtpRows = old('smtp_rows', $campaign?->smtpServers?->map(function($srv) {
                 return [
                   'smtp_server_id' => $srv->id,
-                  'sender_name' => $srv->pivot->sender_name,
-                  'sender_email' => $srv->pivot->sender_email,
                   'send_frequency_minutes' => $srv->pivot->send_frequency_minutes,
                   'max_daily_sends' => $srv->pivot->max_daily_sends,
                   'scheduled_at' => $srv->pivot->scheduled_at ? \Illuminate\Support\Carbon::parse($srv->pivot->scheduled_at)->format('Y-m-d\TH:i') : null,
@@ -97,14 +92,12 @@
             @foreach($smtpRows as $i => $r)
               <tr class="smtp-row">
                 <td style="min-width:220px">
-                  <select name="smtp_rows[{{ $i }}][smtp_server_id]" required>
+                  <select styles ="width:220px" name="smtp_rows[{{ $i }}][smtp_server_id]" required>
                     @foreach($smtpServers as $opt)
                       <option value="{{ $opt->id }}" @selected($r['smtp_server_id']==$opt->id)>{{ $opt->name }} — {{ $opt->host }}</option>
                     @endforeach
                   </select>
                 </td>
-                <td><input type="text" name="smtp_rows[{{ $i }}][sender_name]" value="{{ $r['sender_name'] }}"></td>
-                <td><input type="email" name="smtp_rows[{{ $i }}][sender_email]" value="{{ $r['sender_email'] }}"></td>
                 <td><input type="number" min="1" step="1" name="smtp_rows[{{ $i }}][send_frequency_minutes]" value="{{ $r['send_frequency_minutes'] }}"></td>
                 <td><input type="number" min="1" step="1" name="smtp_rows[{{ $i }}][max_daily_sends]" value="{{ $r['max_daily_sends'] }}"></td>
                 <td><input type="datetime-local" name="smtp_rows[{{ $i }}][scheduled_at]" value="{{ $r['scheduled_at'] }}"></td>
@@ -119,7 +112,7 @@
         </table>
       </div>
       <div style="margin-top:12px">
-        <button type="button" class="btn" id="addSmtpRow"><i class="fa-solid fa-plus"></i> Ajouter un serveur SMTP</button>
+        <button type="button" class="btn" id="addSmtpRow"><i class="fa-solid fa-plus"></i> Ajouter une URL d'API</button>
       </div>
 
       <hr style="margin:24px 0;border-color:var(--border)">
@@ -127,20 +120,19 @@
       {{-- ====== SECTION 3 : Lignes pivot (listes de diffusion) ====== --}}
       <h3 style="margin-top:0"><i class="fa-solid fa-list"></i> Listes de diffusion</h3>
       <div class="hint" style="margin-bottom:8px">
-        Associez une ou plusieurs listes de diffusion à cette campagne. Les contacts de ces listes seront envoyés.
+        Associez une ou plusieurs listes de diffusion à cette campagne. Vous pouvez importer un ou plusieurs fichiers JSON par ligne.
       </div>
 
       <div style="overflow:auto">
         <table class="display" style="width:100%;min-width:400px">
           <thead>
             <tr>
-              <th>Liste de diffusion</th>
+              <th>Fichiers JSON</th>
               <th class="no-sort">Suppr.</th>
             </tr>
           </thead>
           <tbody id="mailingListRows">
             @php
-              // Utilisation de l'opérateur null-safe pour éviter l'erreur
               $mailingListRows = old('mailing_list_rows', $campaign?->mailingLists?->map(function($list) {
                 return ['mailing_list_id' => $list->id];
               })->toArray() ?? []);
@@ -148,11 +140,8 @@
             @foreach($mailingListRows as $i => $r)
               <tr class="mailing-list-row">
                 <td>
-                  <select name="mailing_list_rows[{{ $i }}][mailing_list_id]" required>
-                    @foreach($mailingLists as $opt)
-                      <option value="{{ $opt->id }}" @selected($r['mailing_list_id']==$opt->id)>{{ $opt->name }}</option>
-                    @endforeach
-                  </select>
+                  {{-- Les fichiers existants ne peuvent pas être affichés ici pour des raisons de sécurité --}}
+                  <input type="file" name="mailing_list_rows[{{ $i }}][json_files][]" accept=".json" multiple required>
                 </td>
                 <td class="actions" style="white-space:nowrap">
                   <button type="button" class="btn danger del-row" title="Retirer cette ligne">
@@ -179,14 +168,12 @@
       <template id="smtpRowTemplate">
         <tr class="smtp-row">
           <td style="min-width:220px">
-            <select name="__NAME__[smtp_server_id]" required>
+            <select style="width: 220px" name="__NAME__[smtp_server_id]" required>
               @foreach($smtpServers as $opt)
                 <option value="{{ $opt->id }}">{{ $opt->name }} — {{ $opt->host }}</option>
               @endforeach
             </select>
           </td>
-          <td><input type="text" name="__NAME__[sender_name]"></td>
-          <td><input type="email" name="__NAME__[sender_email]"></td>
           <td><input type="number" min="1" step="1" name="__NAME__[send_frequency_minutes]"></td>
           <td><input type="number" min="1" step="1" name="__NAME__[max_daily_sends]"></td>
           <td><input type="datetime-local" name="__NAME__[scheduled_at]"></td>
@@ -201,11 +188,7 @@
       <template id="mailingListRowTemplate">
         <tr class="mailing-list-row">
           <td>
-            <select name="__NAME__[mailing_list_id]" required>
-              @foreach($mailingLists as $opt)
-                <option value="{{ $opt->id }}">{{ $opt->name }}</option>
-              @endforeach
-            </select>
+            <input type="file" name="__NAME__[json_files][]" accept=".json" multiple required>
           </td>
           <td class="actions" style="white-space:nowrap">
             <button type="button" class="btn danger del-row" title="Retirer cette ligne">
