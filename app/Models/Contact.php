@@ -54,4 +54,15 @@ class Contact extends Model
     {
         return $this->hasMany(EmailLog::class);
     }
+
+    /**
+     * Définit la relation entre un contact et les campagnes auxquelles il est associé.
+     * C'est une relation Many-to-Many via la table pivot 'campaign_contact'.
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsToMany
+     */
+    public function campaigns(): BelongsToMany
+    {
+        return $this->belongsToMany(Campaign::class, 'campaign_contact');
+    }
 }

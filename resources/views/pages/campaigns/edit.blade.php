@@ -170,7 +170,7 @@
           <td style="min-width:220px">
             <select style="width: 220px" name="__NAME__[smtp_server_id]" required>
               @foreach($smtpServers as $opt)
-                <option value="{{ $opt->id }}">{{ $opt->name }} — {{ $opt->host }}</option>
+                <option value="{{ $opt->id }}">{{ $opt->name }} — {{ $opt->url }}</option>
               @endforeach
             </select>
           </td>

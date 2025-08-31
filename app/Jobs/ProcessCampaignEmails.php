@@ -25,7 +25,7 @@ class ProcessCampaignEmails implements ShouldQueue
     /**
      * @var int The ID of the campaign to process.
      */
-    protected $campaignId;
+    protected int $campaignId;
 
     /**
      * Create a new job instance.
@@ -67,10 +67,10 @@ class ProcessCampaignEmails implements ShouldQueue
         }
 
         try {
-            $contactsToSend = Contact::where('campaign_id', $campaign->id)
+            // Utiliser la relation 'contacts' pour récupérer les contacts liés à la campagne
+            $contactsToSend = $campaign->contacts()
                 ->whereDoesntHave('emailLogs', function ($query) use ($campaign) {
-                    $query->where('campaign_id', $campaign->id)
-                          ->whereIn('status', ['sent', 'pending']);
+                    $query->where('campaign_id', $campaign->id);
                 })
                 ->whereNotIn('email', Blacklist::pluck('email')->toArray())
                 ->get();

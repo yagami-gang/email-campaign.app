@@ -5,7 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\BelongsToMany; // Nouvelle importation
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Campaign extends Model
@@ -28,21 +28,6 @@ class Campaign extends Model
     ];
 
     /**
-     * Les attributs qui doivent être "castés" vers des types de données spécifiques.
-     * 'send_frequency_minutes' et 'max_daily_sends' seront des entiers.
-     * 'scheduled_at' sera converti en objet DateTime.
-     *
-     * @var array<string, string>
-     */
-    // protected $casts = [
-    //     'send_frequency_minutes' => 'integer',
-    //     'max_daily_sends' => 'integer',
-    //     'scheduled_at' => 'datetime',
-    //     'status' => 'string',
-    //     'progress' => 'integer',
-    // ];
-
-    /**
      * Définit la relation entre une campagne et le template HTML qu'elle utilise.
      * Une campagne appartient à un seul template.
      *
@@ -60,14 +45,13 @@ class Campaign extends Model
      *
      * @return \Illuminate\Database\Eloquent\Relations\BelongsToMany
      */
-
     public function smtpServers(): BelongsToMany
     {
         return $this->belongsToMany(SmtpServer::class, 'campaign_smtp_server')
             ->withPivot([
-                'sender_name','sender_email',
-                'send_frequency_minutes','max_daily_sends',
-                'scheduled_at','status','progress','nbre_contacts',
+                'sender_name', 'sender_email',
+                'send_frequency_minutes', 'max_daily_sends',
+                'scheduled_at',
             ])
             ->withTimestamps();
     }
@@ -93,13 +77,26 @@ class Campaign extends Model
     {
         return $this->hasMany(ShortUrl::class);
     }
+
     /**
-     * Obtenir les listes de diffusion associées à la campagne.
+     * Définit la relation entre une campagne et les listes de diffusion.
      * Une campagne peut cibler plusieurs listes de diffusion.
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsToMany
      */
     public function mailingLists(): BelongsToMany
     {
         return $this->belongsToMany(MailingList::class, 'campaign_mailing_list');
     }
 
+    /**
+     * Définit la relation entre une campagne et les contacts qui y sont associés.
+     * C'est une relation Many-to-Many via la table pivot 'campaign_contact'.
+     *
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsToMany
+     */
+    public function contacts(): BelongsToMany
+    {
+        return $this->belongsToMany(Contact::class, 'campaign_contact');
+    }
 }
