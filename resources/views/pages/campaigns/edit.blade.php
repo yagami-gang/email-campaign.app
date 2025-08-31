@@ -1,10 +1,10 @@
 @extends('layouts.layout')
 
-@section('title','Éditer la campagne')
+@section('title', isset($campaign) ? 'Éditer la campagne' : 'Créer une campagne')
 
 @section('content')
   <div class="toolbar">
-    <h2 style="margin:0">Éditer la campagne — Étape 2/2</h2>
+    <h2 style="margin:0">{{ isset($campaign) ? 'Éditer la campagne — Étape 2/2' : 'Créer une nouvelle campagne — Étape 1/2' }}</h2>
     <a class="btn" href="{{ route('admin.campaigns.index') }}"><i class="fa-solid fa-rectangle-list"></i> Retour</a>
   </div>
 
@@ -23,36 +23,38 @@
   @endif
 
   <div class="card">
-    {{-- Un seul formulaire qui met à jour la campagne ET toutes les lignes pivot --}}
-    <form method="POST" action="{{ route('admin.campaigns.update', $campaign->id) }}">
+    {{-- Formulaire unique pour la création et l'édition --}}
+    <form method="POST" action="{{ isset($campaign) ? route('admin.campaigns.update', $campaign->id) : route('admin.campaigns.store') }}">
       @csrf
-      @method('PUT')
+      @if(isset($campaign))
+        @method('PUT')
+      @endif
 
       {{-- ====== SECTION 1 : Infos générales de la campagne ====== --}}
       <h3 style="margin-top:0"><i class="fa-solid fa-circle-info"></i> Informations générales</h3>
       <div class="grid cols-2">
         <div class="field">
           <label for="name"><i class="fa-solid fa-tag"></i> Nom de la campagne</label>
-          <input id="name" name="name" type="text" value="{{ old('name', $campaign->name) }}" required>
+          <input id="name" name="name" type="text" value="{{ old('name', $campaign->name ?? '') }}" required>
         </div>
 
         <div class="field">
           <label for="subject"><i class="fa-solid fa-envelope-open-text"></i> Objet du mail</label>
-          <input id="subject" name="subject" type="text" value="{{ old('subject', $campaign->subject) }}" required>
+          <input id="subject" name="subject" type="text" value="{{ old('subject', $campaign->subject ?? '') }}" required>
         </div>
 
         <div class="field">
           <label for="template_id"><i class="fa-solid fa-layer-group"></i> Template HTML</label>
           <select id="template_id" name="template_id" required>
             @foreach($templates as $tpl)
-              <option value="{{ $tpl->id }}" @selected(old('template_id', $campaign->template_id)==$tpl->id)>{{ $tpl->name }}</option>
+              <option value="{{ $tpl->id }}" @selected(old('template_id', $campaign->template_id ?? '')==$tpl->id)>{{ $tpl->name }}</option>
             @endforeach
           </select>
         </div>
 
         <div class="field">
           <label for="nbre_contacts"> Nombre limite de shoot</label>
-          <input id="nbre_contacts" name="nbre_contacts" type="text" value="{{ old('nbre_contacts', $campaign->nbre_contacts) }}" required>
+          <input id="nbre_contacts" name="nbre_contacts" type="text" value="{{ old('nbre_contacts', $campaign->nbre_contacts ?? '') }}" required>
         </div>
       </div>
 
@@ -61,7 +63,7 @@
       {{-- ====== SECTION 2 : Lignes pivot (serveurs SMTP + paramètres) ====== --}}
       <h3 style="margin-top:0"><i class="fa-solid fa-server"></i> Serveurs SMTP & paramètres d’envoi</h3>
       <div class="hint" style="margin-bottom:8px">
-        Associe un ou plusieurs serveurs SMTP à cette campagne. Chaque ligne ci-dessous alimente la table
+        Associez un ou plusieurs serveurs SMTP à cette campagne. Chaque ligne ci-dessous alimente la table
         <code>campaign_smtp_server</code> avec ses propres paramètres (expéditeur, fréquence, etc.).
       </div>
 
@@ -79,85 +81,91 @@
             </tr>
           </thead>
           <tbody id="smtpRows">
-            {{-- Lignes existantes (pivot) --}}
-            @php $rows = old('smtp_rows', []); @endphp
-
-            @if(empty($rows))
-              @foreach($campaign->smtpServers as $i => $srv)
-                @php
-                  $p = $srv->pivot;
-                  $dt = $p->scheduled_at ? \Illuminate\Support\Carbon::parse($p->scheduled_at)->format('Y-m-d\TH:i') : '';
-                @endphp
-                <tr class="smtp-row">
-                  <td style="min-width:220px">
-                    <select name="smtp_rows[{{ $i }}][smtp_server_id]" required>
-                      @foreach($smtpServers as $opt)
-                        <option value="{{ $opt->id }}" @selected($opt->id==$srv->id)>{{ $opt->name }} — {{ $opt->host }}</option>
-                      @endforeach
-                    </select>
-                  </td>
-                  <td><input type="text" name="smtp_rows[{{ $i }}][sender_name]" value="{{ $p->sender_name }}"></td>
-                  <td><input type="email" name="smtp_rows[{{ $i }}][sender_email]" value="{{ $p->sender_email }}"></td>
-                  <td><input type="number" min="1" step="1" name="smtp_rows[{{ $i }}][send_frequency_minutes]" value="{{ (int)$p->send_frequency_minutes }}"></td>
-                  <td><input type="number" min="1" step="1" name="smtp_rows[{{ $i }}][max_daily_sends]" value="{{ (int)$p->max_daily_sends }}"></td>
-                  <td><input type="datetime-local" name="smtp_rows[{{ $i }}][scheduled_at]" value="{{ $dt }}"></td>
-                  <td>
-                    <select name="smtp_rows[{{ $i }}][status]">
-                      @php $statuses = ['draft'=>'Brouillon','scheduled'=>'Planifiée','running'=>'En cours','paused'=>'En pause','completed'=>'Terminée','failed'=>'Échec']; @endphp
-                      @foreach($statuses as $val=>$label)
-                        <option value="{{ $val }}" @selected($p->status===$val)>{{ $label }}</option>
-                      @endforeach
-                    </select>
-                  </td>
-                  <td><input type="number" min="0" max="100" step="1" name="smtp_rows[{{ $i }}][progress]" value="{{ (int)$p->progress }}"></td>
-                  <td><input type="number" min="0" step="1" name="smtp_rows[{{ $i }}][nbre_contacts]" value="{{ (int)$p->nbre_contacts }}"></td>
-                  <td class="actions" style="white-space:nowrap">
-                    <button type="button" class="btn danger del-row" title="Retirer cette ligne">
-                      <i class="fa-solid fa-trash"></i>
-                    </button>
-                  </td>
-                </tr>
-              @endforeach
-            @else
-              {{-- Si validation échouée : on réaffiche les old() --}}
-              @foreach($rows as $i => $r)
-                <tr class="smtp-row">
-                  <td style="min-width:220px">
-                    <select name="smtp_rows[{{ $i }}][smtp_server_id]" required>
-                      @foreach($smtpServers as $opt)
-                        <option value="{{ $opt->id }}" @selected(old("smtp_rows.$i.smtp_server_id")==$opt->id)>{{ $opt->name }} — {{ $opt->host }}</option>
-                      @endforeach
-                    </select>
-                  </td>
-                  <td><input type="text" name="smtp_rows[{{ $i }}][sender_name]" value="{{ old("smtp_rows.$i.sender_name") }}"></td>
-                  <td><input type="email" name="smtp_rows[{{ $i }}][sender_email]" value="{{ old("smtp_rows.$i.sender_email") }}"></td>
-                  <td><input type="number" min="1" step="1" name="smtp_rows[{{ $i }}][send_frequency_minutes]" value="{{ old("smtp_rows.$i.send_frequency_minutes") }}"></td>
-                  <td><input type="number" min="1" step="1" name="smtp_rows[{{ $i }}][max_daily_sends]" value="{{ old("smtp_rows.$i.max_daily_sends") }}"></td>
-                  <td><input type="datetime-local" name="smtp_rows[{{ $i }}][scheduled_at]" value="{{ old("smtp_rows.$i.scheduled_at") }}"></td>
-                  <td>
-                    @php $statuses = ['draft'=>'Brouillon','scheduled'=>'Planifiée','running'=>'En cours','paused'=>'En pause','completed'=>'Terminée','failed'=>'Échec']; @endphp
-                    <select name="smtp_rows[{{ $i }}][status]">
-                      @foreach($statuses as $val=>$label)
-                        <option value="{{ $val }}" @selected(old("smtp_rows.$i.status")===$val)>{{ $label }}</option>
-                      @endforeach
-                    </select>
-                  </td>
-                  <td><input type="number" min="0" max="100" step="1" name="smtp_rows[{{ $i }}][progress]" value="{{ old("smtp_rows.$i.progress") }}"></td>
-                  <td><input type="number" min="0" step="1" name="smtp_rows[{{ $i }}][nbre_contacts]" value="{{ old("smtp_rows.$i.nbre_contacts") }}"></td>
-                  <td class="actions" style="white-space:nowrap">
-                    <button type="button" class="btn danger del-row" title="Retirer cette ligne">
-                      <i class="fa-solid fa-trash"></i>
-                    </button>
-                  </td>
-                </tr>
-              @endforeach
-            @endif
+            @php
+              // Utilisation de l'opérateur null-safe pour éviter l'erreur
+              $smtpRows = old('smtp_rows', $campaign?->smtpServers?->map(function($srv) {
+                return [
+                  'smtp_server_id' => $srv->id,
+                  'sender_name' => $srv->pivot->sender_name,
+                  'sender_email' => $srv->pivot->sender_email,
+                  'send_frequency_minutes' => $srv->pivot->send_frequency_minutes,
+                  'max_daily_sends' => $srv->pivot->max_daily_sends,
+                  'scheduled_at' => $srv->pivot->scheduled_at ? \Illuminate\Support\Carbon::parse($srv->pivot->scheduled_at)->format('Y-m-d\TH:i') : null,
+                ];
+              })->toArray() ?? []);
+            @endphp
+            @foreach($smtpRows as $i => $r)
+              <tr class="smtp-row">
+                <td style="min-width:220px">
+                  <select name="smtp_rows[{{ $i }}][smtp_server_id]" required>
+                    @foreach($smtpServers as $opt)
+                      <option value="{{ $opt->id }}" @selected($r['smtp_server_id']==$opt->id)>{{ $opt->name }} — {{ $opt->host }}</option>
+                    @endforeach
+                  </select>
+                </td>
+                <td><input type="text" name="smtp_rows[{{ $i }}][sender_name]" value="{{ $r['sender_name'] }}"></td>
+                <td><input type="email" name="smtp_rows[{{ $i }}][sender_email]" value="{{ $r['sender_email'] }}"></td>
+                <td><input type="number" min="1" step="1" name="smtp_rows[{{ $i }}][send_frequency_minutes]" value="{{ $r['send_frequency_minutes'] }}"></td>
+                <td><input type="number" min="1" step="1" name="smtp_rows[{{ $i }}][max_daily_sends]" value="{{ $r['max_daily_sends'] }}"></td>
+                <td><input type="datetime-local" name="smtp_rows[{{ $i }}][scheduled_at]" value="{{ $r['scheduled_at'] }}"></td>
+                <td class="actions" style="white-space:nowrap">
+                  <button type="button" class="btn danger del-row" title="Retirer cette ligne">
+                    <i class="fa-solid fa-trash"></i>
+                  </button>
+                </td>
+              </tr>
+            @endforeach
           </tbody>
         </table>
       </div>
-
       <div style="margin-top:12px">
-        <button type="button" class="btn" id="addRow"><i class="fa-solid fa-plus"></i> Ajouter un serveur SMTP</button>
+        <button type="button" class="btn" id="addSmtpRow"><i class="fa-solid fa-plus"></i> Ajouter un serveur SMTP</button>
+      </div>
+
+      <hr style="margin:24px 0;border-color:var(--border)">
+
+      {{-- ====== SECTION 3 : Lignes pivot (listes de diffusion) ====== --}}
+      <h3 style="margin-top:0"><i class="fa-solid fa-list"></i> Listes de diffusion</h3>
+      <div class="hint" style="margin-bottom:8px">
+        Associez une ou plusieurs listes de diffusion à cette campagne. Les contacts de ces listes seront envoyés.
+      </div>
+
+      <div style="overflow:auto">
+        <table class="display" style="width:100%;min-width:400px">
+          <thead>
+            <tr>
+              <th>Liste de diffusion</th>
+              <th class="no-sort">Suppr.</th>
+            </tr>
+          </thead>
+          <tbody id="mailingListRows">
+            @php
+              // Utilisation de l'opérateur null-safe pour éviter l'erreur
+              $mailingListRows = old('mailing_list_rows', $campaign?->mailingLists?->map(function($list) {
+                return ['mailing_list_id' => $list->id];
+              })->toArray() ?? []);
+            @endphp
+            @foreach($mailingListRows as $i => $r)
+              <tr class="mailing-list-row">
+                <td>
+                  <select name="mailing_list_rows[{{ $i }}][mailing_list_id]" required>
+                    @foreach($mailingLists as $opt)
+                      <option value="{{ $opt->id }}" @selected($r['mailing_list_id']==$opt->id)>{{ $opt->name }}</option>
+                    @endforeach
+                  </select>
+                </td>
+                <td class="actions" style="white-space:nowrap">
+                  <button type="button" class="btn danger del-row" title="Retirer cette ligne">
+                    <i class="fa-solid fa-trash"></i>
+                  </button>
+                </td>
+              </tr>
+            @endforeach
+          </tbody>
+        </table>
+      </div>
+      <div style="margin-top:12px">
+        <button type="button" class="btn" id="addMailingListRow"><i class="fa-solid fa-plus"></i> Ajouter une liste de diffusion</button>
       </div>
 
       <div style="margin-top:18px;display:flex;gap:10px">
@@ -167,8 +175,8 @@
         <a href="{{ route('admin.campaigns.index') }}" class="btn"><i class="fa-solid fa-arrow-left"></i> Annuler</a>
       </div>
 
-      {{-- Template caché pour insertion dynamique de lignes --}}
-      <template id="rowTemplate">
+      {{-- Templates cachés pour l'insertion dynamique de lignes --}}
+      <template id="smtpRowTemplate">
         <tr class="smtp-row">
           <td style="min-width:220px">
             <select name="__NAME__[smtp_server_id]" required>
@@ -182,7 +190,6 @@
           <td><input type="number" min="1" step="1" name="__NAME__[send_frequency_minutes]"></td>
           <td><input type="number" min="1" step="1" name="__NAME__[max_daily_sends]"></td>
           <td><input type="datetime-local" name="__NAME__[scheduled_at]"></td>
-          
           <td class="actions" style="white-space:nowrap">
             <button type="button" class="btn danger del-row" title="Retirer cette ligne">
               <i class="fa-solid fa-trash"></i>
@@ -190,6 +197,24 @@
           </td>
         </tr>
       </template>
+
+      <template id="mailingListRowTemplate">
+        <tr class="mailing-list-row">
+          <td>
+            <select name="__NAME__[mailing_list_id]" required>
+              @foreach($mailingLists as $opt)
+                <option value="{{ $opt->id }}">{{ $opt->name }}</option>
+              @endforeach
+            </select>
+          </td>
+          <td class="actions" style="white-space:nowrap">
+            <button type="button" class="btn danger del-row" title="Retirer cette ligne">
+              <i class="fa-solid fa-trash"></i>
+            </button>
+          </td>
+        </tr>
+      </template>
+
     </form>
   </div>
 @endsection
@@ -197,35 +222,54 @@
 @section('scripts')
 <script>
   (function(){
-    const tbody = document.getElementById('smtpRows');
-    const tpl = document.getElementById('rowTemplate').innerHTML;
-    const addBtn = document.getElementById('addRow');
+    const smtpTbody = document.getElementById('smtpRows');
+    const mailingListTbody = document.getElementById('mailingListRows');
+    const smtpTpl = document.getElementById('smtpRowTemplate').innerHTML;
+    const mailingListTpl = document.getElementById('mailingListRowTemplate').innerHTML;
+    const addSmtpBtn = document.getElementById('addSmtpRow');
+    const addMailingListBtn = document.getElementById('addMailingListRow');
 
-    function nextIndex(){
-      const rows = tbody.querySelectorAll('.smtp-row');
+    /**
+     * Calcule le prochain index disponible pour une ligne.
+     * @param {HTMLElement} tbody Le corps de la table.
+     * @param {string} prefix Le préfixe du nom (ex: 'smtp_rows').
+     * @returns {number} Le prochain index.
+     */
+    function nextIndex(tbody, prefix){
+      const rows = tbody.querySelectorAll('tr');
       let max = -1;
       rows.forEach(r => {
         const selects = r.querySelectorAll('select, input');
         selects.forEach(el => {
-          const m = (el.name||'').match(/^smtp_rows\[(\d+)\]/);
+          const m = (el.name||'').match(new RegExp(`^${prefix}\\[(\\d+)\\]`));
           if(m){ max = Math.max(max, parseInt(m[1],10)); }
         });
       });
       return max + 1;
     }
 
-    addBtn?.addEventListener('click', function(){
-      const i = nextIndex();
-      const html = tpl.replaceAll('__NAME__', `smtp_rows[${i}]`);
-      const tr = document.createElement('tbody'); // wrapper temporaire
+    // Ajout d'une ligne pour les serveurs SMTP
+    addSmtpBtn?.addEventListener('click', function(){
+      const i = nextIndex(smtpTbody, 'smtp_rows');
+      const html = smtpTpl.replaceAll('__NAME__', `smtp_rows[${i}]`);
+      const tr = document.createElement('tbody');
       tr.innerHTML = html.trim();
-      tbody.appendChild(tr.firstElementChild);
+      smtpTbody.appendChild(tr.firstElementChild);
     });
 
-    // suppression d'une ligne (DOM only)
-    tbody?.addEventListener('click', function(e){
+    // Ajout d'une ligne pour les listes de diffusion
+    addMailingListBtn?.addEventListener('click', function(){
+      const i = nextIndex(mailingListTbody, 'mailing_list_rows');
+      const html = mailingListTpl.replaceAll('__NAME__', `mailing_list_rows[${i}]`);
+      const tr = document.createElement('tbody');
+      tr.innerHTML = html.trim();
+      mailingListTbody.appendChild(tr.firstElementChild);
+    });
+
+    // Suppression d'une ligne pour les deux tables
+    document.body.addEventListener('click', function(e){
       if(e.target.closest('.del-row')){
-        const row = e.target.closest('tr.smtp-row');
+        const row = e.target.closest('tr');
         if(row) row.remove();
       }
     });

@@ -53,22 +53,21 @@ class ProcessCampaignEmails implements ShouldQueue
             Log::error("Job d'envoi de campagne échoué: Campagne ID {$this->campaignId} introuvable.");
             return;
         }
+
+        // On vérifie le statut avant de commencer. Si elle n'est pas "active", on s'arrête.
+        // C'est important pour le cas d'une mise en pause.
         if ($campaign->status !== 'active') {
             Log::info("Le Job pour la campagne ID {$this->campaignId} a été arrêté car la campagne n'est plus active (statut: {$campaign->status}).");
             return;
         }
 
-        // Met à jour le statut au début du traitement
-        $campaign->update(['status' => 'active', 'progress' => 0]);
-
         try {
             // Récupère tous les contacts (non encore traités pour cette campagne et non blacklistés)
-            // Plus tard, cette logique pourra être affinée pour lier les contacts à des mailing lists spécifiques
             $contactsToSend = Contact::whereDoesntHave('emailLogs', function ($query) use ($campaign) {
                 $query->where('campaign_id', $campaign->id)
-                      ->whereIn('status', ['sent', 'pending']); // Évite de renvoyer si déjà envoyé ou en cours
+                      ->whereIn('status', ['sent', 'pending']);
             })
-            ->whereNotIn('email', Blacklist::pluck('email')->toArray()) // Exclut les emails blacklistés
+            ->whereNotIn('email', Blacklist::pluck('email')->toArray())
             ->get();
 
             $smtpServers = $campaign->smtpServers;
@@ -84,20 +83,23 @@ class ProcessCampaignEmails implements ShouldQueue
             $processedCount = 0;
 
             // Met à jour la progression au moins 100 fois, ou par contact si <100
-            $chunkSize = max(1, (int)($totalContacts / 100)); 
+            $chunkSize = max(1, (int)($totalContacts / 100));
 
             foreach ($contactsToSend as $index => $contact) {
-                // Re-vérifier le statut de la campagne à chaque itération (si mise en pause manuellement)
-                $campaign->refresh(); // Recharge l'état de la campagne depuis la DB
+                // Re-vérifier le statut de la campagne à chaque itération
+                $campaign->refresh();
                 if ($campaign->status !== 'active') {
                     Log::info("Le Job pour la campagne ID {$this->campaignId} a été mis en pause/arrêté manuellement. Statut: {$campaign->status}");
-                    return; // Arrête le job
+                    return;
                 }
-                
+
                 // Sélectionne le serveur SMTP actuel en mode round-robin
                 $smtpServer = $smtpServers[$currentSmtpServerIndex];
 
-                $emailLog = null; // Initialise en dehors du try pour pouvoir y accéder en cas d'erreur
+                // Récupère les attributs de la table pivot pour le serveur actuel
+                $pivotData = $smtpServer->pivot;
+
+                $emailLog = null;
                 try {
                     // 1. Log l'email comme "pending"
                     $emailLog = EmailLog::create([
@@ -121,44 +123,38 @@ class ProcessCampaignEmails implements ShouldQueue
                     $personalizedContent = str_replace('{{anciennete}}', $contact->anciennete ?? '', $personalizedContent);
                     $personalizedContent = str_replace('{{statut}}', $contact->statut ?? '', $personalizedContent);
 
-
                     // 3. Intégration du pixel de suivi d'ouverture
-                    // Assurez-vous que APP_URL est configuré dans votre .env
                     $trackingPixelUrl = url("/track/open/{$emailLog->id}");
                     $personalizedContent .= "<img src=\"{$trackingPixelUrl}\" alt=\"\" width=\"1\" height=\"1\" style=\"display:none;\"/>";
 
                     // 4. Traitement et raccourcissement des URLs pour le suivi des clics
                     $personalizedContent = preg_replace_callback('/<a[^>]*href="([^"]+)"[^>]*>/i', function($matches) use ($campaign, $emailLog, $contact) {
                         $originalUrl = $matches[1];
-                        // Vérifie si c'est l'URL de désinscription (à exclure du raccourcissement de suivi de clic)
                         if (Str::contains($originalUrl, url('/unsubscribe'))) {
-                            return $matches[0]; // Ne raccourcit pas l'URL de désinscription
+                            return $matches[0];
                         }
-                        
-                        // Générer un code court unique
-                        $shortCode = Str::random(8); 
-                        
+
+                        $shortCode = Str::random(8);
+
                         $shortUrl = ShortUrl::create([
                             'original_url' => $originalUrl,
                             'short_code' => $shortCode,
                             'campaign_id' => $campaign->id,
                             'email_log_id' => $emailLog->id,
-                            'tracking_data' => [ // Stocke des données pour analyse future
+                            'tracking_data' => [
                                 'contact_email' => $contact->email,
                                 'contact_id' => $contact->id,
                                 'campaign_name' => $campaign->name,
                             ],
                         ]);
 
-                        $trackedUrl = url("/l/{$shortCode}"); // L'URL que le client recevra
-                        
-                        // Remplace l'URL originale par l'URL raccourcie dans le HTML du lien
+                        $trackedUrl = url("/l/{$shortCode}");
+
                         return str_replace($originalUrl, $trackedUrl, $matches[0]);
                     }, $personalizedContent);
 
                     // 5. Intégration de l'URL de désinscription
-                    // Assurez-vous que APP_URL est configuré dans votre .env
-                    $unsubscribeUrl = url("/unsubscribe/" . encrypt($contact->email)); // Crypte l'email pour sécurité
+                    $unsubscribeUrl = url("/unsubscribe/" . encrypt($contact->email));
                     $personalizedContent .= "<p style='text-align:center; font-size:10px;'><a href=\"{$unsubscribeUrl}\">Se désinscrire</a></p>";
 
                     // 6. Configuration du mailer pour utiliser le serveur SMTP sélectionné
@@ -170,15 +166,14 @@ class ProcessCampaignEmails implements ShouldQueue
                     $transport->setUsername($smtpServer->username);
                     $transport->setPassword($smtpServer->password);
 
-                    // Crée un nouveau mailer avec ce transport
                     $customMailer = new Swift_Mailer($transport);
-                    Mail::setSwiftMailer($customMailer); // Définit le mailer par défaut pour cette requête
+                    Mail::setSwiftMailer($customMailer);
 
                     // 7. Envoi de l'email
-                    Mail::html($personalizedContent, function ($message) use ($campaign, $contact) {
+                    Mail::html($personalizedContent, function ($message) use ($campaign, $contact, $pivotData) {
                         $message->to($contact->email, $contact->firstname . ' ' . $contact->name)
                                 ->subject($campaign->subject)
-                                ->from($campaign->sender_email, $campaign->sender_name);
+                                ->from($pivotData->sender_email, $pivotData->sender_name);
                     });
 
                     // 8. Met à jour le log d'email comme "sent"
@@ -187,7 +182,7 @@ class ProcessCampaignEmails implements ShouldQueue
 
                 } catch (\Exception $e) {
                     // 9. Met à jour le log d'email comme "failed" en cas d'erreur
-                    if ($emailLog) { // S'assurer que le log a été créé avant l'erreur
+                    if ($emailLog) {
                         $emailLog->update(['status' => 'failed']);
                     }
                     Log::error("Échec de l'envoi à {$contact->email} pour la campagne ID {$campaign->id}: " . $e->getMessage());
@@ -204,9 +199,9 @@ class ProcessCampaignEmails implements ShouldQueue
                 // Passe au serveur SMTP suivant pour le prochain email (round-robin)
                 $currentSmtpServerIndex = ($currentSmtpServerIndex + 1) % $totalSmtpServers;
 
-                // Optionnel: Mettre en pause entre les envois pour respecter la fréquence de campagne
-                if ($campaign->send_frequency_minutes > 0) {
-                    sleep($campaign->send_frequency_minutes * 60); // Attend X minutes
+                // Mettre en pause entre les envois pour respecter la fréquence de campagne du pivot
+                if ($pivotData->send_frequency_minutes > 0) {
+                    sleep($pivotData->send_frequency_minutes * 60);
                 }
             }
 
@@ -215,7 +210,7 @@ class ProcessCampaignEmails implements ShouldQueue
             Log::info("Campagne ID {$campaign->id} terminée.");
 
         } catch (\Exception $e) {
-            // En cas d'erreur fatale dans le Job (hors envoi d'un email spécifique)
+            // En cas d'erreur fatale dans le Job
             $campaign->update(['status' => 'failed', 'progress' => 0]);
             Log::error("Erreur fatale lors du Job de campagne ID {$campaign->id}: " . $e->getMessage());
         }

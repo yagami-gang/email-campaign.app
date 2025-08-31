@@ -13,7 +13,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use App\Jobs\ProcessCampaignEmails;
-use Illuminate\Support\Facades\Response; // Importation pour les réponses JSON
+use Illuminate\Support\Facades\Response;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 
 class CampaignController extends Controller
 {
@@ -33,8 +35,8 @@ class CampaignController extends Controller
     {
         $templates = Template::where('is_active', true)->get();
         $smtpServers = SmtpServer::where('is_active', true)->get();
-        $mailingLists = MailingList::all(); // Vous devrez choisir comment lier une mailing list à une campagne
-        
+        $mailingLists = MailingList::all();
+
         return view('pages.campaigns.create', compact('templates', 'smtpServers', 'mailingLists'));
     }
 
@@ -48,20 +50,18 @@ class CampaignController extends Controller
     {
         $validated = $request->validated();
 
-        // Création minimale (étape 1)
         $campaign = Campaign::create([
             'name'          => $validated['name'],
             'subject'       => $validated['subject'],
             'template_id'   => $validated['template_id'],
             'status'        => 'pending',
             'progress'      => 0,
-            'nbre_contacts' => $validated['nbre_contacts'],       // pas saisi à l'étape 1
+            'nbre_contacts' => 0, // Sera mis à jour lors de l'importation de la mailing list
         ]);
 
-        // 👉 redirection vers l’étape 2 (edit)
         return redirect()
             ->route('admin.campaigns.edit', $campaign->id)
-            ->with('status', 'La campagne a été créée. Complète la configuration des serveurs SMTP.');
+            ->with('status', 'La campagne a été créée. Complétez la configuration des serveurs SMTP et des listes de diffusion.');
     }
 
     /**
@@ -69,7 +69,7 @@ class CampaignController extends Controller
      */
     public function show(Campaign $campaign)
     {
-         return view('pages.campaigns.show', compact('campaign'));
+          return view('pages.campaigns.show', compact('campaign'));
     }
 
     /**
@@ -82,7 +82,7 @@ class CampaignController extends Controller
         $mailingLists = MailingList::all();
 
         $selectedSmtpServers = $campaign->smtpServers->pluck('id')->toArray();
-        
+
         return view('pages.campaigns.edit', compact('campaign', 'templates', 'smtpServers', 'mailingLists', 'selectedSmtpServers'));
     }
 
@@ -93,37 +93,9 @@ class CampaignController extends Controller
      * @param  \App\Models\Campaign  $campaign
      * @return \Illuminate\Http\RedirectResponse|\Illuminate\Http\JsonResponse
      */
-    public function update(Request $request, Campaign $campaign)
+    public function update(UpdateCampaignRequest $request, Campaign $campaign)
     {
-        // RÈGLES
-        $statusValues = ['draft','scheduled','running','paused','completed','failed'];
-
-        $validator = Validator::make($request->all(), [
-            // Champs "campagne"
-            'name'        => ['required','string','max:255'],
-            'subject'     => ['required','string','max:255'],
-            'template_id' => ['required','exists:templates,id'],
-
-            // Lignes pivot (table campaign_smtp_server)
-            'smtp_rows'   => ['nullable','array'],
-            'smtp_rows.*.smtp_server_id'       => ['required','exists:smtp_servers,id','distinct'], // 1 serveur = 1 ligne
-            'smtp_rows.*.sender_name'          => ['nullable','string','max:255'],
-            'smtp_rows.*.sender_email'         => ['nullable','email','max:255'],
-            'smtp_rows.*.send_frequency_minutes'=> ['nullable','integer','min:1'],
-            'smtp_rows.*.max_daily_sends'      => ['nullable','integer','min:1'],
-            'smtp_rows.*.scheduled_at'         => ['nullable','date'], // "Y-m-d H:i:s" ou "Y-m-d\TH:i" accepté
-            'smtp_rows.*.status'               => ['nullable', Rule::in($statusValues)],
-            'smtp_rows.*.progress'             => ['nullable','integer','min:0','max:100'],
-            'smtp_rows.*.nbre_contacts'        => ['nullable','integer','min:0'],
-        ], [
-            'smtp_rows.*.smtp_server_id.distinct' => 'Chaque serveur SMTP ne peut être sélectionné qu’une seule fois.',
-        ]);
-
-        if ($validator->fails()) {
-            return back()->withErrors($validator)->withInput();
-        }
-
-        $data = $validator->validated();
+        $data = $request->validated();
 
         // Normalisation: transforme "" en null sur les champs pivot
         $smtpRows = collect($data['smtp_rows'] ?? [])->map(function(array $row){
@@ -138,10 +110,9 @@ class CampaignController extends Controller
         DB::transaction(function () use ($campaign, $data, $smtpRows) {
             // 1) Mettre à jour la campagne
             $campaign->update([
-                'name'        => $data['name'],
-                'subject'     => $data['subject'],
-                'template_id' => $data['template_id'],
-                // status/progress/nbre_contacts de la campagne ne sont pas édités ici (ils existent au pivot)
+                'name'          => $data['name'],
+                'subject'       => $data['subject'],
+                'template_id'   => $data['template_id'],
             ]);
 
             // 2) Préparer le tableau pour sync()
@@ -149,14 +120,14 @@ class CampaignController extends Controller
             $sync = [];
             foreach ($smtpRows as $row) {
                 $sync[(int)$row['smtp_server_id']] = [
-                    'sender_name'            => $row['sender_name'] ?? null,
-                    'sender_email'           => $row['sender_email'] ?? null,
-                    'send_frequency_minutes' => $row['send_frequency_minutes'] ?? null,
-                    'max_daily_sends'        => $row['max_daily_sends'] ?? null,
-                    'scheduled_at'           => $row['scheduled_at'] ?? null,
-                    'status'                 => $row['status'] ?? null,
-                    'progress'               => $row['progress'] ?? null,
-                    'nbre_contacts'          => $row['nbre_contacts'] ?? null,
+                    'sender_name'               => $row['sender_name'] ?? null,
+                    'sender_email'              => $row['sender_email'] ?? null,
+                    'send_frequency_minutes'    => $row['send_frequency_minutes'] ?? null,
+                    'max_daily_sends'           => $row['max_daily_sends'] ?? null,
+                    'scheduled_at'              => $row['scheduled_at'] ?? null,
+                    'status'                    => $row['status'] ?? null,
+                    'progress'                  => $row['progress'] ?? null,
+                    'nbre_contacts'             => $row['nbre_contacts'] ?? null,
                 ];
             }
 
@@ -181,7 +152,7 @@ class CampaignController extends Controller
      * @param  \App\Models\Campaign  $campaign
      * @return \Illuminate\Http\RedirectResponse|\Illuminate\Http\JsonResponse
      */
-    public function destroy(Campaign $campaign)
+    public function destroy(Campaign $campaign, Request $request)
     {
         try {
             $campaign->delete();
@@ -208,7 +179,7 @@ class CampaignController extends Controller
     public function launch(Campaign $campaign, Request $request)
     {
         if ($campaign->status === 'pending' || $campaign->status === 'paused') {
-            $campaign->update(['status' => 'active', 'progress' => 0]); // Remet la progression à 0 au lancement/reprise
+            $campaign->update(['status' => 'active', 'progress' => 0]);
             ProcessCampaignEmails::dispatch($campaign->id);
             $message = 'La campagne a été lancée et est maintenant active. Les emails seront envoyés en arrière-plan.';
             if ($request->expectsJson()) {
@@ -266,7 +237,7 @@ class CampaignController extends Controller
     {
         if ($campaign->status === 'paused') {
             $campaign->update(['status' => 'active']);
-            ProcessCampaignEmails::dispatch($campaign->id); // On redispatch le job
+            ProcessCampaignEmails::dispatch($campaign->id);
             $message = 'La campagne a été reprise et est maintenant active. Les emails reprendront leur envoi en arrière-plan.';
             if ($request->expectsJson()) {
                 return Response::json([

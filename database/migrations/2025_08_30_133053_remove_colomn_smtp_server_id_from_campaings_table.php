@@ -12,6 +12,8 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('campaigns', function (Blueprint $table) {
+            $table->dropForeign(['smtp_server_id']);
+            
             $table->dropColumn('smtp_server_id');
             $table->dropColumn('sender_name');
             $table->dropColumn('sender_email');
@@ -26,6 +28,6 @@ return new class extends Migration
      */
     public function down(): void
     {
-        
+
     }
 };
