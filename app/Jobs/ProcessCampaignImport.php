@@ -35,18 +35,25 @@ class ProcessCampaignImport implements ShouldQueue
     protected int $totalContacts;
 
     /**
+     * Le nom de la table de contacts à remplir.
+     */
+    protected string $tableName;
+
+    /**
      * Crée une nouvelle instance du job.
      *
      * @param int $campaignId L'ID de la campagne.
      * @param string $filePath Le chemin du fichier JSON.
      * @param int $totalContacts Le nombre total de contacts.
+     * @param string $tableName Le nom de la table de contacts.
      * @return void
      */
-    public function __construct(int $campaignId, string $filePath, int $totalContacts)
+    public function __construct(int $campaignId, string $filePath, int $totalContacts, string $tableName)
     {
         $this->campaignId = $campaignId;
         $this->filePath = $filePath;
         $this->totalContacts = $totalContacts;
+        $this->tableName = $tableName;
     }
 
     /**
@@ -68,8 +75,7 @@ class ProcessCampaignImport implements ShouldQueue
         $processedCount = 0;
         $skippedCount = 0;
         $batchSize = 5000;
-        $contactEmailsBatch = [];
-        $contactDataLookup = [];
+        $contactDataBatch = [];
         $progressUpdateStep = max(1, (int)($this->totalContacts / 100));
 
         try {
@@ -83,9 +89,8 @@ class ProcessCampaignImport implements ShouldQueue
                     continue;
                 }
 
-                $email = strtolower($contactData['email']);
-                $contactEmailsBatch[] = $email;
-                $contactDataLookup[$email] = [
+                $contactDataBatch[] = [
+                    'email' => strtolower($contactData['email']),
                     'name' => $contactData['name'] ?? null,
                     'firstname' => $contactData['firstname'] ?? null,
                     'cp' => $contactData['cp'] ?? null,
@@ -102,10 +107,9 @@ class ProcessCampaignImport implements ShouldQueue
 
                 $processedCount++;
 
-                if (count($contactEmailsBatch) >= $batchSize) {
-                    $this->processBatchAndAttach($campaign, $contactEmailsBatch, $contactDataLookup);
-                    $contactEmailsBatch = [];
-                    $contactDataLookup = [];
+                if (count($contactDataBatch) >= $batchSize) {
+                    $this->processBatch($contactDataBatch);
+                    $contactDataBatch = [];
                 }
 
                 if ($this->totalContacts > 0 && ($processedCount % $progressUpdateStep === 0 || $processedCount === $this->totalContacts)) {
@@ -114,15 +118,17 @@ class ProcessCampaignImport implements ShouldQueue
                 }
             }
 
-            if (!empty($contactEmailsBatch)) {
-                $this->processBatchAndAttach($campaign, $contactEmailsBatch, $contactDataLookup);
+            if (!empty($contactDataBatch)) {
+                $this->processBatch($contactDataBatch);
             }
 
             $successCount = $processedCount - $skippedCount;
-            $campaign->update(['status' => 'completed', 'progress' => 100]);
+            $campaign->update([
+                'status' => 'completed',
+                'progress' => 100,
+                'nbre_contacts' => DB::table($this->tableName)->count()
+            ]);
             Log::info("Importation de la campagne '{$campaign->name}' terminée. ID: {$campaign->id}. Statistiques: {$successCount} contacts importés, {$skippedCount} contacts ignorés.");
-
-            Storage::disk('local')->delete($this->filePath);
 
         } catch (Exception $e) {
             $campaign->update(['status' => 'failed', 'progress' => 0]);
@@ -131,27 +137,17 @@ class ProcessCampaignImport implements ShouldQueue
     }
 
     /**
-     * Traite un lot de contacts en les insérant/mettant à jour, puis en les attachant à la campagne.
+     * Traite un lot de contacts en les insérant/mettant à jour dans la table de contacts.
      *
-     * @param Campaign $campaign
-     * @param array $contactEmailsBatch Le tableau des emails à traiter.
-     * @param array $contactDataLookup Le tableau des données pour chaque email.
+     * @param array $contactDataBatch Le tableau des données de contacts.
      * @return void
      */
-    protected function processBatchAndAttach(Campaign $campaign, array $contactEmailsBatch, array $contactDataLookup): void
+    protected function processBatch(array $contactDataBatch): void
     {
-        // Étape 1: Insérer ou mettre à jour les contacts dans la table 'contacts'
-        $contactDataForUpsert = array_values($contactDataLookup);
-        Contact::upsert(
-            $contactDataForUpsert,
-            ['email'], // La clé unique est uniquement 'email'
+        DB::table($this->tableName)->upsert(
+            $contactDataBatch,
+            ['email'],
             ['name', 'firstname', 'cp', 'department', 'phone_number', 'city', 'profession', 'habitation', 'anciennete', 'statut', 'updated_at']
         );
-
-        // Étape 2: Récupérer les IDs des contacts insérés ou mis à jour
-        $contactIdsToAttach = Contact::whereIn('email', $contactEmailsBatch)->pluck('id');
-
-        // Étape 3: Lier les contacts à la campagne via la table de pivot
-        $campaign->contacts()->syncWithoutDetaching($contactIdsToAttach);
     }
 }
