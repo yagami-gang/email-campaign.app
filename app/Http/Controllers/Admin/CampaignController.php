@@ -134,7 +134,7 @@ class CampaignController extends Controller
 
         $campaign->update(['nbre_contacts' => $totalContacts, 'status' => 'pending']);
 
-        ProcessCampaignImport::dispatch($campaign->id, $filePath);
+        ProcessCampaignImport::dispatch($campaign->id, $filePath, $totalContacts);
 
         Log::info("Job d'importation de contacts déclenché pour la campagne ID {$campaign->id}.");
         return response()->json(['message' => 'L\'importation des contacts a été mise en file d\'attente et sera traitée en arrière-plan.'], 202);
