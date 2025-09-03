@@ -16,7 +16,6 @@
                     <th>Nom</th>
                     <th>Objet</th>
                     <th>Modèle</th>
-                    <th class="no-sort">Listes de diffusion</th>
                     <th>Statut</th>
                     <th>Progression</th>
                     <th class="no-sort" style="width:50px; text-align:center;">Actions</th>
@@ -32,13 +31,6 @@
                             <span class="badge">
                                 <i class="fa-solid fa-file-code" style="opacity:.7"></i> {{ $c->template->name }}
                             </span>
-                        </td>
-                        <td>
-                            @forelse($c->mailingLists as $mailingList)
-                                <span class="badge">{{ $mailingList->name }}</span>
-                            @empty
-                                <span style="color: var(--muted);">Aucune</span>
-                            @endforelse
                         </td>
                         <td>
                             @php
