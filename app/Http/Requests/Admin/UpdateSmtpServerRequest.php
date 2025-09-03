@@ -33,6 +33,7 @@ class UpdateSmtpServerRequest extends FormRequest
             // Le nom doit être unique SAUF pour le serveur que nous sommes en train de modifier
             'name' => ['required', 'string', 'max:255', Rule::unique('smtp_servers')->ignore($smtpServerId)],
             'url' => 'required|string|max:255',
+            'api_key' => 'nullable|string', // Rendre la clé optionnelle
             'is_active' => 'boolean',
         ];
     }
@@ -47,14 +48,7 @@ class UpdateSmtpServerRequest extends FormRequest
         return [
             'name.required' => 'Le nom du serveur SMTP est obligatoire.',
             'name.unique' => 'Un autre serveur SMTP avec ce nom existe déjà.',
-            'host.required' => 'L\'hôte SMTP est obligatoire.',
-            'port.required' => 'Le port SMTP est obligatoire.',
-            'port.integer' => 'Le port doit être un nombre entier.',
-            'port.min' => 'Le port doit être au minimum 1.',
-            'port.max' => 'Le port ne doit pas dépasser 65535.',
-            'username.required' => 'Le nom d\'utilisateur SMTP est obligatoire.',
-            // Le mot de passe n'est pas requis pour la mise à jour, donc pas de message 'required'
-            'encryption.in' => 'Le type de chiffrement doit être "tls" ou "ssl".',
+            'api_key' => 'nullable|string', // Rendre la clé optionnelle
             'is_active.boolean' => 'Le statut "actif" doit être vrai ou faux.',
         ];
     }

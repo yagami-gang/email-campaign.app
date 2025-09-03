@@ -52,6 +52,20 @@
                 </label>
                 <input id="url" name="url" type="text" placeholder="https://api.smtp.com" value="{{ old('url', $isEditing ? $smtpServer->url : '') }}" required>
             </div>
+            
+            <div class="field" style="grid-column: 1 / -1;"> {{-- On le met sur toute la largeur --}}
+                <label for="api_key">
+                    <i class="fa-solid fa-key" ></i> Clé API (Header Bearer)
+                </label>
+                {{-- Le type "password" masque la clé pour la sécurité --}}
+                <input id="api_key" name="api_key" value="{{ old('api_key', $isEditing ? $smtpServer->api_key : '') }}" type="text" placeholder="•••••••••••••••••••••••••••••">
+                <span class="hint">
+                    Laissez vide si non requis.
+                    @if(isset($smtpServer) && $smtpServer->api_key)
+                        <span style="color:var(--warn)">Une clé est déjà enregistrée. Remplir ce champ l'écrasera.</span>
+                    @endif
+                </span>
+            </div>
 
             {{-- Statut 'Actif' --}}
             <div class="field" style="grid-column: 1 / -1;">

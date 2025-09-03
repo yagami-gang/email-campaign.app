@@ -20,6 +20,7 @@ class SmtpServer extends Model
         'name',
         'url',
         'is_active',
+        'api_key',
     ];
 
     /**

@@ -67,7 +67,11 @@ class SmtpServerController extends Controller
         $validatedData = $request->validated();
 
         $validatedData['is_active'] = $request->boolean('is_active');
-
+        
+        // On ne la met à jour que si une nouvelle valeur est fournie.
+        if (empty($validatedData['api_key'])) {
+            unset($validatedData['api_key']);
+        }
         $smtpServer->update($validatedData);
 
         return redirect()->route('admin.smtp_servers.index')->with('success', 'Le serveur SMTP a été mis à jour avec succès !');

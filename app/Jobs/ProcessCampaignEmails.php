@@ -2,275 +2,119 @@
 
 namespace App\Jobs;
 
+use App\Models\Campaign;
+use Illuminate\Bus\Batch;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use App\Models\Campaign;
-use App\Models\Contact;
-use App\Models\EmailLog;
-use App\Models\Blacklist;
-use App\Models\ShortUrl;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Str;
-use Exception;
-use Carbon\Carbon;
-use Illuminate\Support\Facades\Http;
+use Throwable;
 
-class ProcessCampaignEmails implements ShouldQueue
+class ProcessCampaignEmails implements ShouldQueue, ShouldBeUnique
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     /**
-     * @var int The ID of the campaign to process.
+     * Le nombre de fois où le job peut être tenté.
+     * @var int
      */
-    protected int $campaignId;
+    public int $tries = 3;
 
     /**
-     * Create a new job instance.
+     * Crée une instance du job.
      *
-     * @param int $campaignId
-     * @return void
+     * @param int $campaignId L'ID de la campagne à orchestrer.
      */
-    public function __construct(int $campaignId)
+    public function __construct(protected int $campaignId)
     {
-        $this->campaignId = $campaignId;
     }
 
     /**
-     * Execute the job.
-     * The job prepares data and sends it to a remote API.
-     *
-     * @return void
+     * Calcule un identifiant unique pour le job.
+     * Empêche que plusieurs orchestrateurs pour la même campagne soient en file d'attente simultanément.
+     */
+    public function uniqueId(): int
+    {
+        return $this->campaignId;
+    }
+
+    /**
+     * Exécute le job d'orchestration.
      */
     public function handle(): void
     {
-        $campaign = Campaign::with(['template', 'smtpServers'])->find($this->campaignId);
+        $campaign = Campaign::with('smtpServers')->find($this->campaignId);
 
-        if (!$campaign) {
-            Log::error("Campaign job failed: Campaign ID {$this->campaignId} not found.");
+        if (!$this->canStart($campaign)) {
             return;
         }
 
+        // Marquer la campagne comme 'en cours' et réinitialiser la progression si nécessaire.
         if ($campaign->status !== 'active') {
-            Log::info("Job for campaign ID {$this->campaignId} was stopped because the campaign is no longer active.");
-            return;
+            $campaign->update(['status' => 'active', 'sent_count' => 0, 'progress' => 0]);
         }
 
-        // Récupérer tous les serveurs SMTP actifs associés à la campagne.
-        $smtpServers = $campaign->smtpServers;
-        if ($smtpServers->isEmpty()) {
+        Log::info("Orchestrateur : Lancement de la campagne #{$campaign->id} '{$campaign->name}'.");
+
+        // Créer un job travailleur pour chaque serveur SMTP associé
+        $jobs = $campaign->smtpServers->map(function ($smtpServer) {
+            return new SendCampaignBatch($this->campaignId, $smtpServer->id);
+        })->all();
+
+        // Lancer les jobs dans un "lot" (batch) pour pouvoir suivre leur achèvement global.
+        Bus::batch($jobs)
+            ->then(function (Batch $batch) {
+                // Ce bloc s'exécute seulement si TOUS les jobs du lot ont réussi.
+                $campaign = Campaign::find($this->campaignId);
+                // On revérifie qu'elle n'est pas déjà complétée par la mise à jour de progression
+                if ($campaign && $campaign->status !== 'completed') {
+                    $campaign->update(['status' => 'completed', 'progress' => 100]);
+                    Log::info("Campagne #{$this->campaignId} terminée avec succès.");
+                }
+            })
+            ->catch(function (Batch $batch, Throwable $e) {
+                // Ce bloc s'exécute si UN SEUL des jobs du lot échoue définitivement.
+                $campaign = Campaign::find($this->campaignId);
+                if ($campaign) {
+                    $campaign->update(['status' => 'failed']);
+                    Log::error("Un job a échoué dans le lot de la campagne #{$this->campaignId}. La campagne est marquée comme échouée. Erreur : " . $e->getMessage());
+                }
+            })
+            ->name("Campaign Sending - ID: {$this->campaignId}")
+            ->dispatch();
+
+        Log::info("Orchestrateur : " . count($jobs) . " jobs travailleurs ont été dispatchés pour la campagne #{$campaign->id}.");
+    }
+
+    /**
+     * Vérifie si la campagne est dans un état qui permet le lancement.
+     *
+     * @param Campaign|null $campaign
+     * @return bool
+     */
+    private function canStart(?Campaign $campaign): bool
+    {
+        if (!$campaign) {
+            Log::error("Orchestrateur : Campagne ID {$this->campaignId} introuvable.");
+            return false;
+        }
+
+        // On ne lance que si la campagne est explicitement planifiée, en pause, ou déjà en cours (pour la reprise par le scheduler).
+        if (!in_array($campaign->status, ['scheduled', 'running', 'paused'])) {
+            Log::warning("Orchestrateur : La campagne #{$campaign->id} n'est pas dans un état lançable (état actuel: {$campaign->status}).");
+            return false;
+        }
+
+        if ($campaign->smtpServers->isEmpty()) {
             $campaign->update(['status' => 'failed']);
-            Log::error("Campaign ID {$campaign->id} failed: No active SMTP servers associated.");
-            return;
+            Log::error("Orchestrateur : La campagne #{$campaign->id} a échoué car aucun serveur SMTP n'est configuré.");
+            return false;
         }
 
-        try {
-            // Utiliser la relation 'contacts' pour récupérer les contacts liés à la campagne
-            $contactsToSend = $campaign->contacts()
-                ->whereDoesntHave('emailLogs', function ($query) use ($campaign) {
-                    $query->where('campaign_id', $campaign->id);
-                })
-                ->whereNotIn('email', Blacklist::pluck('email')->toArray())
-                ->get();
-
-            $totalContacts = $contactsToSend->count();
-            $processedCount = 0;
-            $progressUpdateStep = max(1, (int)($totalContacts / 100));
-            $smtpServerIndex = 0;
-
-            foreach ($contactsToSend as $contact) {
-                $campaign->refresh();
-                if ($campaign->status !== 'active') {
-                    Log::info("Job for campaign ID {$this->campaignId} was manually paused/stopped.");
-                    return;
-                }
-
-                $emailSent = false;
-                $attempts = 0;
-                $maxAttempts = $smtpServers->count();
-
-                // Crée une seule entrée de journal pour ce contact avant de tenter l'envoi
-                $emailLog = EmailLog::create([
-                    'campaign_id' => $campaign->id,
-                    'contact_id' => $contact->id,
-                    'status' => 'pending',
-                    'smtp_server_id' => null, // Initialisé sans serveur
-                ]);
-
-                // Boucle de failover pour essayer tous les serveurs disponibles
-                while (!$emailSent && $attempts < $maxAttempts) {
-                    $smtpServer = $smtpServers->get($smtpServerIndex);
-
-                    try {
-                        // Prépare les données de l'email
-                        $emailData = $this->prepareEmailDataForApi($campaign, $contact, $emailLog);
-
-                        // Met à jour le journal avec le serveur SMTP actuel
-                        $emailLog->update(['smtp_server_id' => $smtpServer->id]);
-
-                        // Envoi de l'email via le serveur API
-                        $response = $this->sendToRemoteEmailApi($emailData, $smtpServer->api_endpoint, $smtpServer->api_key);
-
-                        if ($response['success']) {
-                            $emailLog->update(['status' => 'sent', 'sent_at' => now()]);
-                            Log::info("Email dispatch request successful for {$contact->email} via server {$smtpServer->id}.");
-                            $emailSent = true;
-                        } else {
-                            $emailLog->update(['status' => 'failed', 'error_message' => $response['message']]);
-                            Log::error("Email dispatch request failed for {$contact->email} via server {$smtpServer->id}: " . $response['message']);
-                        }
-
-                    } catch (\Exception $e) {
-                        $emailLog->update(['status' => 'failed', 'error_message' => $e->getMessage(), 'smtp_server_id' => $smtpServer->id]);
-                        Log::error("API request failed for {$contact->email} via server {$smtpServer->id}: " . $e->getMessage());
-                    }
-
-                    // On passe au serveur suivant si l'envoi a échoué
-                    if (!$emailSent) {
-                        $smtpServerIndex = ($smtpServerIndex + 1) % $smtpServers->count();
-                        $attempts++;
-                    }
-                }
-
-                // Si l'email n'a pas pu être envoyé après toutes les tentatives
-                if (!$emailSent) {
-                    Log::error("All SMTP server attempts failed for {$contact->email}. Skipping contact.");
-                }
-
-                $processedCount++;
-                $this->updateProgress($campaign, $processedCount, $totalContacts, $progressUpdateStep);
-            }
-
-            $campaign->update(['status' => 'completed', 'progress' => 100]);
-            Log::info("Campaign ID {$campaign->id} completed.");
-
-        } catch (\Exception $e) {
-            $campaign->update(['status' => 'failed', 'progress' => 0]);
-            Log::error("Fatal error during campaign job ID {$campaign->id}: " . $e->getMessage());
-        }
-    }
-
-    /**
-     * Prepares all email data for sending to the remote API.
-     * @return array
-     */
-    private function prepareEmailDataForApi(Campaign $campaign, Contact $contact, EmailLog $emailLog): array
-    {
-        $personalizedContent = $this->personalizeContent($campaign->template->html_content, $contact);
-        $personalizedContent = $this->addTrackingPixel($personalizedContent, $emailLog);
-        $personalizedContent = $this->trackUrls($personalizedContent, $campaign, $emailLog, $contact);
-        $personalizedContent = $this->addUnsubscribeLink($personalizedContent, $contact);
-
-        return [
-            'to_email' => $contact->email,
-            'to_name' => $contact->firstname . ' ' . $contact->name,
-            'subject' => $campaign->subject,
-            'content' => $personalizedContent,
-            'campaign_id' => $campaign->id,
-            'email_log_id' => $emailLog->id,
-            'from_email' => 'contact@example.com',
-            'from_name' => 'My Application',
-        ];
-    }
-
-    /**
-     * Handles HTML content personalization.
-     */
-    private function personalizeContent(string $content, Contact $contact): string
-    {
-        return str_replace([
-            '{{name}}', '{{firstname}}', '{{email}}', '{{city}}', '{{cp}}',
-            '{{department}}', '{{phoneNumber}}', '{{profession}}', '{{habitation}}',
-            '{{anciennete}}', '{{statut}}'
-        ], [
-            $contact->name ?? '', $contact->firstname ?? '', $contact->email ?? '', $contact->city ?? '', $contact->cp ?? '',
-            $contact->department ?? '', $contact->phone_number ?? '', $contact->profession ?? '', $contact->habitation ?? '',
-            $contact->anciennete ?? '', $contact->statut ?? ''
-        ], $content);
-    }
-
-    /**
-     * Adds the open tracking pixel.
-     */
-    private function addTrackingPixel(string $content, EmailLog $emailLog): string
-    {
-        $trackingPixelUrl = url("/track/open/{$emailLog->id}");
-        return $content . "<img src=\"{$trackingPixelUrl}\" alt=\"\" width=\"1\" height=\"1\" style=\"display:none;\"/>";
-    }
-
-    /**
-     * Processes and shortens URLs for click tracking.
-     */
-    private function trackUrls(string $content, Campaign $campaign, EmailLog $emailLog, Contact $contact): string
-    {
-        return preg_replace_callback('/<a[^>]*href="([^"]+)"[^>]*>/i', function($matches) use ($campaign, $emailLog, $contact) {
-            $originalUrl = $matches[1];
-            if (Str::contains($originalUrl, url('/unsubscribe'))) {
-                return $matches[0];
-            }
-
-            $shortCode = Str::random(8);
-            ShortUrl::create([
-                'original_url' => $originalUrl,
-                'short_code' => $shortCode,
-                'campaign_id' => $campaign->id,
-                'email_log_id' => $emailLog->id,
-                'tracking_data' => [
-                    'contact_email' => $contact->email,
-                    'contact_id' => $contact->id,
-                    'campaign_name' => $campaign->name,
-                ],
-            ]);
-
-            $trackedUrl = url("/l/{$shortCode}");
-            return str_replace($originalUrl, $trackedUrl, $matches[0]);
-        }, $content);
-    }
-
-    /**
-     * Adds the unsubscribe link.
-     */
-    private function addUnsubscribeLink(string $content, Contact $contact): string
-    {
-        $unsubscribeUrl = url("/unsubscribe/" . encrypt($contact->email));
-        return $content . "<p style='text-align:center; font-size:10px;'><a href=\"{$unsubscribeUrl}\">Se désinscrire</a></p>";
-    }
-
-    /**
-     * Sends email data to the remote API.
-     * Replaces the simulation with a real HTTP call.
-     * @param array $emailData
-     * @param string $apiUrl The API URL to use.
-     * @param string|null $apiKey The API key if needed.
-     * @return array
-     */
-    private function sendToRemoteEmailApi(array $emailData, string $apiUrl, ?string $apiKey = null): array
-    {
-        try {
-            $headers = ['Content-Type' => 'application/json'];
-            if ($apiKey) {
-                $headers['Authorization'] = 'Bearer ' . $apiKey;
-            }
-
-            $response = Http::withHeaders($headers)
-                            ->post($apiUrl, $emailData);
-
-            return ['success' => $response->successful(), 'message' => $response->body()];
-        } catch (\Exception $e) {
-            return ['success' => false, 'message' => $e->getMessage()];
-        }
-    }
-
-    /**
-     * Updates the campaign progress.
-     */
-    private function updateProgress(Campaign $campaign, int $processed, int $total, int $step): void
-    {
-        if ($total > 0 && ($processed % $step === 0 || $processed === $total)) {
-            $progress = min(100, (int)(($processed / $total) * 100));
-            $campaign->update(['progress' => $progress]);
-        }
+        return true;
     }
 }
