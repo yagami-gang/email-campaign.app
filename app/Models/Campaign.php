@@ -80,17 +80,6 @@ class Campaign extends Model
     }
 
     /**
-     * Définit la relation entre une campagne et les listes de diffusion.
-     * Une campagne peut cibler plusieurs listes de diffusion.
-     *
-     * @return \Illuminate\Database\Eloquent\Relations\BelongsToMany
-     */
-    public function mailingLists(): BelongsToMany
-    {
-        return $this->belongsToMany(MailingList::class, 'campaign_mailing_list');
-    }
-
-    /**
      * Définit la relation entre une campagne et les contacts qui y sont associés.
      * C'est une relation Many-to-Many via la table pivot 'campaign_contact'.
      *

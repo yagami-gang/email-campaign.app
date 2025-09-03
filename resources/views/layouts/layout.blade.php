@@ -257,7 +257,7 @@
         padding: 8px; border-radius: 50%; width: 32px; height: 32px; transition: background .2s;
     }
     .dropdown-toggle:hover { background: rgba(255,255,255,0.05); color: var(--text); }
-   
+
     .dropdown-menu.show { display: block; }
     .dropdown-item {
         color: var(--text); padding: 8px 12px; text-decoration: none; display: flex; align-items: center;
@@ -277,6 +277,7 @@
     table.dataTable tbody tr:hover { background-color: rgba(255,255,255,0.02); }
     table.dataTable td { padding: 12px 14px; }
 </style>
+@yield('styles')
 
 </head>
 <body>
