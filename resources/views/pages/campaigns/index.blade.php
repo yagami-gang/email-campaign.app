@@ -42,7 +42,7 @@
                                     'completed' => ['label' => 'Terminée', 'class' => 'status-completed'],
                                     'failed'    => ['label' => 'Échec', 'class' => 'status-failed'],
                                     'importing'    => ['label' => 'En cours d\'importation', 'class' => 'status-running'],
-                                    'imported'    => ['label' => 'Début de l\'envoi des mails imminent', 'class' => 'status-completed'],
+                                    'imported'    => ['label' => 'Importation terminée', 'class' => 'status-scheduled'],
                                 ];
                                 $current = $statusMap[$c->status] ?? ['label' => $c->status, 'class' => ''];
                             @endphp
