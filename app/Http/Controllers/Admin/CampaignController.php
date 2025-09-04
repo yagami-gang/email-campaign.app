@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Campaign;
 use App\Models\Template;
 use App\Models\SmtpServer;
+use App\Models\Json_file;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -20,6 +21,8 @@ use JsonMachine\Items;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Database\Schema\Blueprint;
+
+use Illuminate\Support\Facades\File;
 
 class CampaignController extends Controller
 {
@@ -96,6 +99,13 @@ class CampaignController extends Controller
         // Récupère la liste des fichiers JSON dans le dossier d'importation
         $jsonFiles = Storage::disk('local')->files('private');
 
+        $jsonFiles = collect(File::files(storage_path('app/private'))) // non récursif
+    ->filter(fn ($f) => $f->getExtension() === 'json')
+    ->map(fn ($f) => $f->getPathname())
+    ->all();
+
+        //dd($files);
+
         return view('pages.campaigns.edit', compact('campaign', 'templates', 'smtpServers', 'jsonFiles'));
     }
 
@@ -121,13 +131,13 @@ class CampaignController extends Controller
             // Section 1: Infos générales
             'name' => 'required|string|max:255',
             'subject' => 'required|string|max:255',
-            'template_id' => 'required|exists:templates,id',
+            'template_id' => 'required',
 
             // Section 2: Canaux d'envoi (API)
             'smtp_rows' => 'required|array|min:1',
             'smtp_rows.*.sender_name' => 'required|string|max:255',
             'smtp_rows.*.sender_email' => 'required|email|max:255',
-            'smtp_rows.*.smtp_server_id' => 'required|exists:smtp_servers,id',
+            'smtp_rows.*.smtp_server_id' => 'required',
             'smtp_rows.*.send_frequency_minutes' => 'nullable|integer|min:1',
             'smtp_rows.*.max_daily_sends' => 'nullable|integer|min:1',
             'smtp_rows.*.scheduled_at' => 'nullable|date_format:Y-m-d\TH:i',
@@ -136,11 +146,7 @@ class CampaignController extends Controller
             'json_file_path' => 'required|array|min:1',
             'json_file_path.*' => [
                 'required',
-                'string',
-                // Règle pour s'assurer que le fichier existe bien dans le disque de stockage
-                Rule::exists('local')->where(function ($query, $attribute, $value) {
-                    return Storage::disk('local')->exists($value);
-                }),
+                'string'
             ],
         ]);
 
@@ -150,9 +156,17 @@ class CampaignController extends Controller
             $campaign->update([
                 'name' => $validated['name'],
                 'subject' => $validated['subject'],
-                'template_id' => $validated['template_id'],
-                'json_file_path' => $validated['json_file_path'], // Sauvegarde des chemins de fichiers
+                'template_id' => $validated['template_id']
             ]);
+
+            foreach($validated['json_file_path'] as $json_file_path){
+                if( Json_file::where('file_path', $json_file_path)->where('campaign_id', $campaign->id)->count() == 0 ){
+                    $json_f = new Json_file;
+                    $json_f->file_path = $json_file_path;
+                    $json_f->campaign_id = $campaign->id;
+                    $json_f->save();
+                }
+            }
 
             // 2. Préparer les données pour la synchronisation de la table pivot
             $smtpSyncData = [];
@@ -172,44 +186,56 @@ class CampaignController extends Controller
             $campaign->smtpServers()->sync($smtpSyncData);
 
             // 3. Gestion de la table de contacts
-            $tableName = 'contacts_'.time();
+            
+            $tableName = $campaign->nom_table_contact;
 
-            // Si une ancienne table existe, on la supprime pour repartir de zéro
-            if (Schema::hasTable($tableName)) {
-                Schema::drop($tableName);
+            DB::commit();
+
+            if ( $campaign->nom_table_contact == null || $campaign->nom_table_contact == "" ){
+
+                $tableName = 'contacts_'.time();
+
+                // Créer la nouvelle table
+                Schema::create($tableName, function ($table) {
+                    // Définissez ici la structure exacte de votre table de contacts
+                    $table->id();
+                    $table->string('email')->unique();
+                    $table->string('name')->nullable();
+                    $table->string('firstname')->nullable();
+                    $table->string('cp')->nullable();
+                    $table->string('department')->nullable();
+                    $table->string('phone_number')->nullable();
+                    $table->string('city')->nullable();
+                    $table->string('profession')->nullable();
+                    $table->string('habitation')->nullable();
+                    $table->string('anciennete')->nullable();
+                    $table->string('statut')->nullable();
+                    //$table->timestamps();
+                    $table->timestamp('imported_at')->useCurrent();
+                });
             }
 
-            // Créer la nouvelle table
-            Schema::create($tableName, function ($table) {
-                // Définissez ici la structure exacte de votre table de contacts
-                $table->id();
-                $table->string('email')->unique();
-                $table->string('name')->nullable();
-                $table->string('firstname')->nullable();
-                $table->string('cp')->nullable();
-                $table->string('department')->nullable();
-                $table->string('phone_number')->nullable();
-                $table->string('city')->nullable();
-                $table->string('profession')->nullable();
-                $table->string('habitation')->nullable();
-                $table->string('anciennete')->nullable();
-                $table->string('statut')->nullable();
-                $table->timestamp('imported_at')->useCurrent();
-            });
-
             // Mettre à jour la campagne avec le nom de sa table de contacts
+            $new_status = $campaign->status;
+            $progress = $campaign->progress;
+            $nbre_contacts = $campaign->nbre_contacts;
+
+            if( $campaign->status == "pending" ){
+                $new_status = 'importing';
+                $progress = 0;
+                $nbre_contacts = 0;
+            }
+            
             // et réinitialiser la progression.
             $campaign->update([
                 'nom_table_contact' => $tableName,
-                'status' => 'pending', // La campagne est maintenant 'planifiée'
-                'progress' => 0,
-                'nbre_contacts' => 0, // Le job mettra à jour ce compteur
+                'status' => $new_status, // La campagne est maintenant 'planifiée'
+                'progress' => $progress,
+                'nbre_contacts' => $nbre_contacts, // Le job mettra à jour ce compteur
             ]);
 
             // 4. Lancer le job d'importation en arrière-plan
-            ProcessCampaignImport::dispatch($campaign->id, $validated['json_file_path'], $tableName);
-
-            DB::commit();
+            //ProcessCampaignImport::dispatch($campaign->id, $validated['json_file_path'], $tableName);
 
             return redirect()
                 ->route('admin.campaigns.index')

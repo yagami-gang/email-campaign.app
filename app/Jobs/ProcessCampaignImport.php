@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use JsonMachine\Items;
 use Throwable; // Utilisez Throwable pour attraper les Exceptions et les Erreurs
+use Illuminate\Support\Facades\File;
 
 class ProcessCampaignImport implements ShouldQueue, ShouldBeUnique
 {
@@ -77,7 +78,7 @@ class ProcessCampaignImport implements ShouldQueue, ShouldBeUnique
             return;
         }
 
-        $campaign->update(['status' => 'processing', 'progress' => 0]);
+        $campaign->update(['status' => 'importing', 'progress' => 0]);
         Log::info("Début de l'importation pour la campagne #{$campaign->id} '{$campaign->name}'.");
 
         $totalContactsProcessed = 0;
@@ -90,14 +91,31 @@ class ProcessCampaignImport implements ShouldQueue, ShouldBeUnique
             $estimatedTotalContacts = $this->estimateTotalContacts();
 
             foreach ($this->filePaths as $filePath) {
-                if (!Storage::disk('local')->exists($filePath)) {
+
+                $jsonFiles = collect(File::files(storage_path('app/private'))) // non récursif
+                ->filter(fn ($f) => $f->getExtension() === 'json')
+                ->map(fn ($f) => $f->getPathname())
+                ->all();
+
+                if ( ! in_array($filePath, $jsonFiles) ) {
                     Log::warning("Fichier introuvable pour la campagne #{$campaign->id}, il est ignoré : {$filePath}");
                     continue;
                 }
 
                 Log::info("Traitement du fichier '{$filePath}' pour la campagne #{$campaign->id}.");
 
-                $stream = Storage::disk('local')->readStream($filePath);
+                $given = str_replace('\\', '/', $filePath);              // normalise les slashs
+                $root  = str_replace('\\', '/', Storage::disk('local')->path('')); // ex: .../storage/app/
+
+                if (str_starts_with($given, $root)) {
+                    $relative = ltrim(substr($given, strlen($root)), '/'); // => ex. "private/engie_10cols-sample.json"
+                } else {
+                    // fallback: le chemin n'est pas sous le root du disque local, traite-le comme absolu (Option B)
+                    $relative = null;
+                }
+
+                $stream = Storage::disk('local')->readStream($relative);
+                //dd($stream);
                 $contacts = Items::fromStream($stream);
 
                 foreach ($contacts as $contactObject) {
@@ -110,11 +128,11 @@ class ProcessCampaignImport implements ShouldQueue, ShouldBeUnique
 
                     $dataToInsert = [];
                     foreach (self::COLUMN_MAP as $jsonKey => $dbColumn) {
-                        if (isset($contactData[$jsonKey])) {
+                        //if (isset($contactData[$jsonKey])) {
                             $dataToInsert[$dbColumn] = ($dbColumn === 'email')
                                 ? strtolower(trim($contactData[$jsonKey]))
                                 : $contactData[$jsonKey];
-                        }
+                        //}
                     }
 
                     // N'ajoutez que s'il y a un email valide
@@ -148,7 +166,7 @@ class ProcessCampaignImport implements ShouldQueue, ShouldBeUnique
             // Mise à jour finale après succès
             $finalCount = DB::table($this->tableName)->count();
             $campaign->update([
-                'status' => 'scheduled', // Statut final prêt pour l'envoi
+                'status' => 'imported', // Statut final prêt pour l'envoi
                 'progress' => 100,
                 'nbre_contacts' => $finalCount
             ]);

@@ -25,7 +25,8 @@ class Campaign extends Model
         'status',
         'progress',
         'template_id',
-        'nbre_contacts'
+        'nbre_contacts',
+        'nom_table_contact'
     ];
 
     /**
