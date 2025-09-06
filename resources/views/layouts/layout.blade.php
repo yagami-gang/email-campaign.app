@@ -93,7 +93,7 @@
     .field label{color:var(--muted);font-weight:600}
     .hint{color:var(--muted);font-size:12px}
 
-    input[type="text"],input[type="email"],input[type="number"],input[type="datetime-local"],select,textarea,input[type="file"]{
+    input[type="text"],input[type="password"],input[type="email"],input[type="number"],input[type="datetime-local"],select,textarea,input[type="file"]{
       background:#0b1220;border:1px solid var(--border);color:var(--text);border-radius:var(--r-sm);padding:10px 12px;outline:none
     }
     [data-theme="light"] input[type="text"], [data-theme="light"] input[type="email"],
@@ -277,6 +277,24 @@
     table.dataTable tbody tr:hover { background-color: rgba(255,255,255,0.02); }
     table.dataTable td { padding: 12px 14px; }
 </style>
+<style>
+    /* Styles généraux pour la page de profil */
+    .card-header { padding-bottom: 16px; border-bottom: 1px solid var(--border); margin-bottom: 24px; }
+    .card-header h3 { font-size: 1.1rem; font-weight: 600; margin: 0 0 4px 0; }
+    .card-header .hint { margin: 0; }
+    .card-footer { display: flex; justify-content: flex-end; align-items: center; padding-top: 24px; margin-top: 24px; border-top: 1px solid var(--border); }
+    .mt-4 { margin-top: 16px; }
+    .mt-6 { margin-top: 24px; }
+    .mt-1 { margin-top: 4px; }
+    .mb-4 { margin-bottom: 16px; }
+    .input-error { color: var(--danger); font-size: 13px; margin-top: 4px; }
+
+    /* Styles pour le message de succès */
+    .alert { display: flex; align-items: flex-start; gap: 14px; padding: 16px; border-radius: var(--r); border: 1px solid transparent; }
+    .alert-success { background-color: rgba(34, 197, 94, 0.08); border-color: rgba(34, 197, 94, 0.3); color: #bbf7d0; }
+    .alert-success i { color: var(--ok); font-size: 18px; padding-top: 2px; }
+
+</style>
 @yield('styles')
 
 </head>
@@ -312,14 +330,14 @@
           </select>
         </div>
 
-        @if (Route::has('profile.edit'))
-          <a class="btn" href="{{ route('profile.edit') }}"><i class="fa-regular fa-id-badge"></i> Profil</a>
-        @endif
+          <a class="btn" href="{{ route('admin.profile.edit') }}"><i class="fa-regular fa-id-badge"></i> Profil</a>
+
 
         @if (Route::has('logout'))
           <form id="logout-form" action="{{ route('logout') }}" method="POST" style="display:none">@csrf</form>
           <button class="btn danger" id="logoutBtn"><i class="fa-solid fa-right-from-bracket"></i> Déconnexion</button>
         @endif
+
       </header>
 
       <main class="content">
