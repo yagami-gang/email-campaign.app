@@ -15,7 +15,7 @@
     <div class="card">
       <div class="field">
         <label><i class="fa-solid fa-bullhorn"></i> Campagnes</label>
-        <div style="font-size:26px;font-weight:700">{{ $metrics['total_campaigns'] ?? 0 }}</div>
+        <div style="font-size:26px;font-weight:700">{{ count($campaigns) }}</div>
       </div>
       <div class="hint">Total</div>
     </div>

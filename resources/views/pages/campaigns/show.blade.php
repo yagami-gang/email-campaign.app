@@ -31,21 +31,18 @@
 
     <div class="card">
       <div class="field">
-        <label><i class="fa-solid fa-envelope-circle-check"></i> Délivrés</label>
-        <div style="font-size:26px;font-weight:700">{{ $metrics['delivered'] ?? 0 }}</div>
+        <label><i class="fa-solid fa-envelope-circle-check"></i> Nombre de contacts importés</label>
+        <div style="font-size:26px;font-weight:700">{{ $metrics['nbre_contacts'] }}</div>
       </div>
       <div class="hint">Mails acceptés</div>
     </div>
 
     <div class="card">
       <div class="field">
-        <label><i class="fa-solid fa-envelope-open-text"></i> Taux d’ouverture</label>
-        <div style="display:flex;align-items:center;gap:10px">
-          <progress value="{{ $openRate }}" max="100" style="width:160px"></progress>
-          <strong>{{ $openRate }}%</strong>
-        </div>
+        <label><i class="fa-solid fa-envelope-circle-check"></i> Délivrés</label>
+        <div style="font-size:26px;font-weight:700">{{ $metrics['delivered'] ?? 0 }}</div>
       </div>
-      <div class="hint">{{ $opens }} ouvertures / {{ $del }} délivrés</div>
+      <div class="hint">Mails acceptés</div>
     </div>
 
   </div>

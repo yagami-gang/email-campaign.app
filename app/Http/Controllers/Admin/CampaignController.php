@@ -85,7 +85,54 @@ class CampaignController extends Controller
      */
     public function show(Campaign $campaign)
     {
-        return view('pages.campaigns.show', compact('campaign'));
+        $contacts = 0;
+        if( $campaign->nom_table_contact != null ){
+            $contacts = DB::table($campaign->nom_table_contact)->count();
+        }
+        
+
+        // Nombre total d'emails envoyés pour cette campagne
+        $totalSent = $campaign->emailLogs()->where('status', 'sent')->count();
+
+        // Nombre d'ouvertures uniques pour cette campagne
+        $totalOpens = DB::table('tracking_opens')
+                        ->join('email_logs', 'tracking_opens.email_log_id', '=', 'email_logs.id')
+                        ->where('email_logs.campaign_id', $campaign->id)
+                        ->distinct('email_logs.contact_id') // Compter les ouvertures uniques par contact
+                        ->count();
+
+        // Nombre de clics uniques pour cette campagne
+        $totalClicks = DB::table('tracking_clicks')
+                            ->join('email_logs', 'tracking_clicks.email_log_id', '=', 'email_logs.id')
+                            ->where('email_logs.campaign_id', $campaign->id)
+                            ->distinct('email_logs.contact_id') // Compter les clics uniques par contact
+                            ->count();
+
+        // Calcul du taux d'ouverture
+        $openRate = ($totalSent > 0) ? round(($totalOpens / $totalSent) * 100, 2) : 0;
+
+        // Calcul du taux de clic
+        // Le taux de clic peut être calculé par rapport aux emails envoyés ou aux emails ouverts
+        // Ici, nous le calculons par rapport aux emails envoyés pour une vue globale
+        $clickRate = ($totalSent > 0) ? round(($totalClicks / $totalSent) * 100, 2) : 0;
+        
+        // Si vous préférez le CTR par rapport aux ouvertures (Click-Through Open Rate) :
+        // $clickRate = ($totalOpens > 0) ? round(($totalClicks / $totalOpens) * 100, 2) : 0;
+
+
+        $metrics = [
+            'nbre_contacts' => $contacts,
+            'campaign_id' => $campaign->id,
+            'campaign_name' => $campaign->name,
+            'template_name' => $campaign->template->name ?? 'N/A',
+            'total_sent' => $totalSent,
+            'total_opens' => $totalOpens,
+            'total_clicks' => $totalClicks,
+            'open_rate' => $openRate, // Taux d'ouverture en %
+            'click_rate' => $clickRate, // Taux de clic en %
+        ];
+
+        return view('pages.campaigns.show', compact('campaign', 'metrics'));
     }
 
     /**
@@ -210,8 +257,13 @@ class CampaignController extends Controller
                     $table->string('habitation')->nullable();
                     $table->string('anciennete')->nullable();
                     $table->string('statut')->nullable();
+                    $table->enum('status', ['sended','fail_http', 'fail_smtp'])->nullable();
                     //$table->timestamps();
                     $table->timestamp('imported_at')->useCurrent();
+                    $table->timestamp('delivered_at')->nullable();
+                    $table->timestamp('opened_at')->nullable();
+                    $table->timestamp('cliecked_at')->nullable();
+                    $table->integer('id_smtp_server')->nullable();
                 });
             }
 
