@@ -179,6 +179,7 @@ class CampaignController extends Controller
             'name' => 'required|string|max:255',
             'subject' => 'required|string|max:255',
             'template_id' => 'required',
+            'shoot_limit' => 'required',
 
             // Section 2: Canaux d'envoi (API)
             'smtp_rows' => 'required|array|min:1',
@@ -203,7 +204,8 @@ class CampaignController extends Controller
             $campaign->update([
                 'name' => $validated['name'],
                 'subject' => $validated['subject'],
-                'template_id' => $validated['template_id']
+                'template_id' => $validated['template_id'],
+                'shoot_limit' => $validated['shoot_limit']
             ]);
 
             foreach($validated['json_file_path'] as $json_file_path){

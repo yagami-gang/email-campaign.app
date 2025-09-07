@@ -13,6 +13,11 @@ use App\Models\Json_file; // adapte si ton modèle a un autre nom/namespace
 use Illuminate\Support\Facades\Http;
 use Carbon\Carbon;
 
+
+/**
+ * Lance l'importation des contacts des Json_files au statut "importation_en_cours"
+ */
+
 Route::get('/api/cron/import-json-files', function (Request $request) {
 
     // (Optionnel) mini-protection par token:
@@ -275,7 +280,9 @@ Route::get('/api/cron/import-json-files', function (Request $request) {
 ////////////////////////////////////////////////////////////////////////////////
 
 
-
+/**
+ * Lance l'envoi des mails pour toutes les campagnes au statut "imported" et "active"
+ */
 
 
 Route::get('/cron/send-campaign-emails', function (Request $request) {
@@ -306,6 +313,22 @@ Route::get('/cron/send-campaign-emails', function (Request $request) {
             continue;
         }
 
+        $contactsTable = $campaign->nom_table_contact;
+
+        // si le nombre limit de shoot est atteint pour une campagne
+        $count = DB::table($contactsTable)
+            ->where('status', 'sended')
+            ->count();
+
+        if ($count >= $campaign->shoot_limit && $campaign->shoot_limit > 0) {
+            DB::table('campaigns')->where('id', $campaign->id)->update([
+                'status'   => 'completed',
+                'progress' => 100
+            ]);
+            Log::warning("Campagne #{$campaign->id} a atteint son shoot_limit");
+            continue;
+        }
+
         // Passe en active si besoin
         if ($campaign->status == 'imported') {
             $campaign->update([
@@ -317,7 +340,7 @@ Route::get('/cron/send-campaign-emails', function (Request $request) {
 
         $report['campaigns_started']++;
 
-        $contactsTable = $campaign->nom_table_contact;
+        
         $today = Carbon::today();
 
         foreach ($campaign->smtpServers as $smtp) {

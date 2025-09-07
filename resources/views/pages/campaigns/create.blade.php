@@ -74,13 +74,13 @@
       <div class="field">
         <label for="shoot_limit">Nombre limite de shoot</label>
         <input id="shoot_limit" name="shoot_limit" type="number" required
-               value="{{ old('shoot_limit') }}"
+               value="{{ old('shoot_limit') ?? 0 }}"
                aria-invalid="@error('shoot_limit') true @else false @enderror"
                @error('shoot_limit') style="border-color:#ef4444" @enderror>
         @error('shoot_limit')
           <small class="hint" style="color:#fca5a5">{{ $message }}</small>
         @enderror
-        <div class="hint">Nombre de shoot max pour cette campagne.</div>
+        <div class="hint">0 (zéro) pour aucune limite</div>
       </div>
 
       <div style="grid-column:1/-1;display:flex;gap:10px">

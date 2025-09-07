@@ -83,7 +83,7 @@
           <label for="subject">Objet du mail</label>
           <input id="subject" name="subject" type="text" value="{{ old('subject', $campaign->subject ?? '') }}" required>
         </div>
-        <div class="field" style="grid-column: 1 / -1;">
+        <div class="field">
           <label for="template_id">Template HTML</label>
           <select id="template_id" name="template_id" required>
             @foreach($templates as $tpl)
@@ -91,6 +91,14 @@
             @endforeach
           </select>
         </div>
+
+        <div class="field">
+          <label for="shoot_limit">Nombre limite de shoot</label>
+          <input id="shoot_limit" name="shoot_limit" type="number" value="{{ old('shoot_limit', $campaign->shoot_limit ?? '0') }}" required>
+          <div class="hint">0 (zéro) pour aucune limite</div>
+        </div>
+
+        
       </div>
     </div>
 
