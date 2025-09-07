@@ -92,21 +92,21 @@ class CampaignController extends Controller
         
 
         // Nombre total d'emails envoyés pour cette campagne
-        $totalSent = $campaign->emailLogs()->where('status', 'sent')->count();
+        $totalSent = 0; //$campaign->emailLogs()->where('status', 'sent')->count();
 
         // Nombre d'ouvertures uniques pour cette campagne
-        $totalOpens = DB::table('tracking_opens')
-                        ->join('email_logs', 'tracking_opens.email_log_id', '=', 'email_logs.id')
-                        ->where('email_logs.campaign_id', $campaign->id)
-                        ->distinct('email_logs.contact_id') // Compter les ouvertures uniques par contact
-                        ->count();
+        $totalOpens = 0; //DB::table('tracking_opens')
+                        // ->join('email_logs', 'tracking_opens.email_log_id', '=', 'email_logs.id')
+                        // ->where('email_logs.campaign_id', $campaign->id)
+                        // ->distinct('email_logs.contact_id') // Compter les ouvertures uniques par contact
+                        // ->count();
 
         // Nombre de clics uniques pour cette campagne
-        $totalClicks = DB::table('tracking_clicks')
-                            ->join('email_logs', 'tracking_clicks.email_log_id', '=', 'email_logs.id')
-                            ->where('email_logs.campaign_id', $campaign->id)
-                            ->distinct('email_logs.contact_id') // Compter les clics uniques par contact
-                            ->count();
+        $totalClicks = 0; //DB::table('tracking_clicks')
+                            // ->join('email_logs', 'tracking_clicks.email_log_id', '=', 'email_logs.id')
+                            // ->where('email_logs.campaign_id', $campaign->id)
+                            // ->distinct('email_logs.contact_id') // Compter les clics uniques par contact
+                            // ->count();
 
         // Calcul du taux d'ouverture
         $openRate = ($totalSent > 0) ? round(($totalOpens / $totalSent) * 100, 2) : 0;
