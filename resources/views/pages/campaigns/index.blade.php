@@ -294,7 +294,7 @@ async function pollCampaignsProgress() {
         document.getElementById('campaigns-table').addEventListener('click', function(e) {
             const button = e.target.closest('.campaign-action-btn:not(.is-disabled)');
             if (button) {
-                handleCampaignAction(button);
+              handleCampaignAction(button);
             }
         });
     });

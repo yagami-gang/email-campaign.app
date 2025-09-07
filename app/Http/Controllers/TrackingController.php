@@ -67,7 +67,8 @@ class TrackingController extends Controller
         if ($shortUrl) {
             // Enregistre le clic
             TrackingClick::create([
-                'email_log_id' => $shortUrl->email_log_id,
+                'id_contact' => $shortUrl->id_contact,
+                'id_campaign' => $shortUrl->id_campaign,
                 'short_url_id' => $shortUrl->id,
                 'clicked_at' => now(),
             ]);

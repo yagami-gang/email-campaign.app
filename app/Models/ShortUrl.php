@@ -19,8 +19,8 @@ class ShortUrl extends Model
     protected $fillable = [
         'original_url',
         'short_code',
-        'campaign_id',
-        'email_log_id',
+        'id_campaign',
+        'id_contact',
         'tracking_data',
     ];
 

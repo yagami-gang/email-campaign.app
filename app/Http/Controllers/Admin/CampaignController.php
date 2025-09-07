@@ -10,12 +10,10 @@ use App\Models\Json_file;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use App\Jobs\ProcessCampaignEmails;
 use Illuminate\Support\Facades\Response;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Exception;
-use App\Jobs\ProcessCampaignImport;
 use Illuminate\Validation\ValidationException;
 use JsonMachine\Items;
 use Illuminate\Support\Facades\Storage;
@@ -58,6 +56,7 @@ class CampaignController extends Controller
             'name' => 'required|string|max:255',
             'subject' => 'required|string|max:255',
             'template_id' => 'required|exists:templates,id',
+            'shoot_limit' => 'required'
         ]);
 
         try {
@@ -68,6 +67,7 @@ class CampaignController extends Controller
                 'status' => 'pending',
                 'progress' => 0,
                 'nbre_contacts' => 0,
+                'shoot_limit' => $validatedData['shoot_limit']
             ]);
 
         } catch (Exception $e) {
@@ -259,10 +259,12 @@ class CampaignController extends Controller
                     $table->string('statut')->nullable();
                     $table->enum('status', ['sended','fail_http', 'fail_smtp'])->nullable();
                     //$table->timestamps();
+                    
+                    $table->timestamp('sent_at')->nullable();
                     $table->timestamp('imported_at')->useCurrent();
                     $table->timestamp('delivered_at')->nullable();
                     $table->timestamp('opened_at')->nullable();
-                    $table->timestamp('cliecked_at')->nullable();
+                    $table->timestamp('clicked_at')->nullable();
                     $table->integer('id_smtp_server')->nullable();
                 });
             }
@@ -285,9 +287,6 @@ class CampaignController extends Controller
                 'progress' => $progress,
                 'nbre_contacts' => $nbre_contacts, // Le job mettra à jour ce compteur
             ]);
-
-            // 4. Lancer le job d'importation en arrière-plan
-            //ProcessCampaignImport::dispatch($campaign->id, $validated['json_file_path'], $tableName);
 
             return redirect()
                 ->route('admin.campaigns.index')
@@ -347,8 +346,7 @@ class CampaignController extends Controller
                 return redirect()->back()->with('error', $errorMessage);
             }
 
-            $campaign->update(['status' => 'active', 'progress' => 0]);
-            ProcessCampaignEmails::dispatch($campaign->id);
+            $campaign->update(['status' => 'active']);
             $message = 'La campagne a été lancée et est maintenant active. Les emails seront envoyés en arrière-plan.';
 
             if ($request->expectsJson()) {
@@ -413,7 +411,7 @@ class CampaignController extends Controller
             }
 
             $campaign->update(['status' => 'active']);
-            ProcessCampaignEmails::dispatch($campaign->id);
+
             $message = 'La campagne a été reprise et est maintenant active. Les emails reprendront leur envoi en arrière-plan.';
             if ($request->expectsJson()) {
                 return Response::json([

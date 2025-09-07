@@ -26,7 +26,9 @@ class Campaign extends Model
         'progress',
         'template_id',
         'nbre_contacts',
-        'nom_table_contact'
+        'sent_count',
+        'nom_table_contact',
+        'shoot_limit'
     ];
 
     /**
@@ -53,7 +55,7 @@ class Campaign extends Model
             ->withPivot([
                 'sender_name', 'sender_email',
                 'send_frequency_minutes', 'max_daily_sends',
-                'scheduled_at',
+                'scheduled_at', 'progress', 'status'
             ])
             ->withTimestamps();
     }

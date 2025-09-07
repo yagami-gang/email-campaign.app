@@ -16,7 +16,8 @@ class TrackingClick extends Model
      * @var array<int, string>
      */
     protected $fillable = [
-        'email_log_id',
+        'id_contact',
+        'id_campaign',
         'short_url_id',
         'clicked_at',
     ];

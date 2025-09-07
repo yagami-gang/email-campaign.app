@@ -70,17 +70,17 @@
         <div class="hint">Liste gérée côté back-office.</div>
       </div>
 
-      {{-- nbre_contacts (optionnel) --}}
+      {{-- shoot_limit (optionnel) --}}
       <div class="field">
-        <label for="nbre_contacts">Nombre limite de shoot</label>
-        <input id="nbre_contacts" name="nbre_contacts" type="number"
-               value="{{ old('nbre_contacts', 0) }}"
-               aria-invalid="@error('nbre_contacts') true @else false @enderror"
-               @error('nbre_contacts') style="border-color:#ef4444" @enderror>
-        @error('nbre_contacts')
+        <label for="shoot_limit">Nombre limite de shoot</label>
+        <input id="shoot_limit" name="shoot_limit" type="number" required
+               value="{{ old('shoot_limit') }}"
+               aria-invalid="@error('shoot_limit') true @else false @enderror"
+               @error('shoot_limit') style="border-color:#ef4444" @enderror>
+        @error('shoot_limit')
           <small class="hint" style="color:#fca5a5">{{ $message }}</small>
         @enderror
-        <div class="hint">Optionnel à la création (0 par défaut).</div>
+        <div class="hint">Nombre de shoot max pour cette campagne.</div>
       </div>
 
       <div style="grid-column:1/-1;display:flex;gap:10px">

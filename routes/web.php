@@ -1,5 +1,7 @@
 <?php
 
+use App\Models\Campaign;
+
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\ProfileController;
 
@@ -32,14 +34,15 @@ Route::middleware('auth')->group(function () {
 Route::get('/unsubscribe/{encryptedEmail}', [BlacklistController::class, 'unsubscribeForm'])->name('unsubscribe.form');
 Route::post('/unsubscribe', [BlacklistController::class, 'unsubscribe'])->name('unsubscribe.process');
 // Routes pour les services de tracking (publiques)
-Route::get('/track/open/{emailLogId}', [TrackingController::class, 'open'])->name('track.open');
+Route::get('/track/open/{contactTable}/{id_contact}', [TrackingController::class, 'open'])->name('track.open'); 
 Route::get('/l/{shortCode}', [TrackingController::class, 'click'])->name('track.click');
 
 // Les routes de l'admin devraient être protégées par un middleware d'authentification et un préfixe
 Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () {
 
     Route::get('/dashboard', function () {
-        return view('dashboard');
+        $campaigns = Campaign::all();
+        return view('dashboard', compact('campaigns'));
     })->name('dashboard');
 
     // Routes de ressources pour les templates (CRUD)
