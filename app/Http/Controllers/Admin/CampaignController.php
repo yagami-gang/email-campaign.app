@@ -85,53 +85,60 @@ class CampaignController extends Controller
      */
     public function show(Campaign $campaign)
     {
-        $contacts = 0;
-        if( $campaign->nom_table_contact != null ){
-            $contacts = DB::table($campaign->nom_table_contact)->count();
-        }
-        
-
-        // Nombre total d'emails envoyés pour cette campagne
-        $totalSent = 0; //$campaign->emailLogs()->where('status', 'sent')->count();
-
-        // Nombre d'ouvertures uniques pour cette campagne
-        $totalOpens = 0; //DB::table('tracking_opens')
-                        // ->join('email_logs', 'tracking_opens.email_log_id', '=', 'email_logs.id')
-                        // ->where('email_logs.campaign_id', $campaign->id)
-                        // ->distinct('email_logs.contact_id') // Compter les ouvertures uniques par contact
-                        // ->count();
-
-        // Nombre de clics uniques pour cette campagne
-        $totalClicks = 0; //DB::table('tracking_clicks')
-                            // ->join('email_logs', 'tracking_clicks.email_log_id', '=', 'email_logs.id')
-                            // ->where('email_logs.campaign_id', $campaign->id)
-                            // ->distinct('email_logs.contact_id') // Compter les clics uniques par contact
-                            // ->count();
-
-        // Calcul du taux d'ouverture
-        $openRate = ($totalSent > 0) ? round(($totalOpens / $totalSent) * 100, 2) : 0;
-
-        // Calcul du taux de clic
-        // Le taux de clic peut être calculé par rapport aux emails envoyés ou aux emails ouverts
-        // Ici, nous le calculons par rapport aux emails envoyés pour une vue globale
-        $clickRate = ($totalSent > 0) ? round(($totalClicks / $totalSent) * 100, 2) : 0;
-        
-        // Si vous préférez le CTR par rapport aux ouvertures (Click-Through Open Rate) :
-        // $clickRate = ($totalOpens > 0) ? round(($totalClicks / $totalOpens) * 100, 2) : 0;
-
-
         $metrics = [
-            'nbre_contacts' => $contacts,
-            'campaign_id' => $campaign->id,
-            'campaign_name' => $campaign->name,
-            'template_name' => $campaign->template->name ?? 'N/A',
-            'total_sent' => $totalSent,
-            'total_opens' => $totalOpens,
-            'total_clicks' => $totalClicks,
-            'open_rate' => $openRate, // Taux d'ouverture en %
-            'click_rate' => $clickRate, // Taux de clic en %
+            'imported_count'    => 0,
+            'sent_count'        => 0,
+            'delivered_count'   => 0,
+            'open_count'        => 0,
+            'click_count'       => 0,
+            'unsubscribe_count' => 0,
         ];
 
+        // --- On vérifie que la table de contacts existe avant de lancer les requêtes ---
+        if (!$campaign->nom_table_contact || !Schema::hasTable($campaign->nom_table_contact)) {
+            // Si la table n'existe pas, on renvoie les métriques à zéro pour éviter les erreurs.
+            return view('pages.campaigns.show', compact('campaign', 'metrics'));
+        }
+
+        $contactTableName = $campaign->nom_table_contact;
+
+        // --- 1. Nombre de contacts importés ---
+        $metrics['imported_count'] = DB::table($contactTableName)->count();
+
+        // --- 2. Calcul des statuts depuis la table de contacts ---
+        // Requête unique pour compter 'envoyés' et 'délivrés' selon VOS définitions.
+        $statusMetrics = DB::table($contactTableName)
+            ->selectRaw("
+                COUNT(status) as sent_count, -- Envoyés = statut non null
+                COUNT(CASE WHEN status = 'sended' THEN 1 END) as delivered_count -- Délivrés = statut 'sended'
+            ")
+            ->first();
+
+        if ($statusMetrics) {
+            $metrics['sent_count'] = (int) $statusMetrics->sent_count;
+            $metrics['delivered_count'] = (int) $statusMetrics->delivered_count;
+        }
+
+        // --- 3. Nombre d'ouvertures ---
+        // Le champ opened_at est sur la table de contacts.
+        $metrics['open_count'] = DB::table($contactTableName)
+            ->whereNotNull('opened_at')
+            ->count();
+
+        // --- 4. Nombre de clics uniques ---
+        $metrics['click_count'] = DB::table('tracking_clicks')
+            ->join($contactTableName, 'tracking_clicks.contact_email', '=', $contactTableName . '.email')
+            ->where('tracking_clicks.campaign_id', $campaign->id)
+            ->distinct($contactTableName . '.id')
+            ->count($contactTableName . '.id');
+
+        // --- 5. Nombre de désinscriptions ---
+        // On compte le nombre de contacts de cette campagne qui sont maintenant dans la blacklist.
+        $metrics['unsubscribe_count'] = DB::table('blacklists')
+            ->where('campaign_id', $campaign->id)
+            ->count();
+
+        // --- 6. Passer les données à la vue ---
         return view('pages.campaigns.show', compact('campaign', 'metrics'));
     }
 
@@ -235,7 +242,7 @@ class CampaignController extends Controller
             $campaign->smtpServers()->sync($smtpSyncData);
 
             // 3. Gestion de la table de contacts
-            
+
             $tableName = $campaign->nom_table_contact;
 
             DB::commit();
@@ -261,7 +268,7 @@ class CampaignController extends Controller
                     $table->string('statut')->nullable();
                     $table->enum('status', ['sended','fail_http', 'fail_smtp'])->nullable();
                     //$table->timestamps();
-                    
+
                     $table->timestamp('sent_at')->nullable();
                     $table->timestamp('imported_at')->useCurrent();
                     $table->timestamp('delivered_at')->nullable();
@@ -281,7 +288,7 @@ class CampaignController extends Controller
                 $progress = 0;
                 $nbre_contacts = 0;
             }
-            
+
             // et réinitialiser la progression.
             $campaign->update([
                 'nom_table_contact' => $tableName,

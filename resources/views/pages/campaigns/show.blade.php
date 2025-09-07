@@ -1,161 +1,181 @@
 @extends('layouts.layout')
 
-@section('title','Dashboard')
+@section('title', 'Rapport de la campagne')
 
 @section('content')
   <div class="toolbar">
-    <h2 style="margin:0">Campagne: {{ $campaign->name }}</h2>
-    
+    <div>
+      <h2 style="margin:0">Rapport : {{ $campaign->name }}</h2>
+      <p class="hint" style="margin-top:4px;">Statistiques de performance en temps réel de votre campagne.</p>
+    </div>
+    <a class="btn" href="{{ route('admin.campaigns.index') }}"><i class="fa-solid fa-rectangle-list"></i> Retour à la liste</a>
   </div>
 
   @php
-      $del = max(1, (int)($metrics['delivered'] ?? 0));
-      $opens = (int)($metrics['opens'] ?? 0);
-      $clicks = (int)($metrics['clicks'] ?? 0);
-      $openRate  = round(($opens / $del) * 100, 1);
-      $clickRate = round(($clicks / $del) * 100, 1);
-      $ctor      = $opens > 0 ? round(($clicks / max(1,$opens)) * 100, 1) : 0; // Click-To-Open
-    @endphp
+    // --- Les calculs PHP restent identiques ---
+    $importedCount = (int)($metrics['imported_count'] ?? 0);
+    $sentCount = (int)($metrics['sent_count'] ?? 0);
+    $deliveredCount = (int)($metrics['delivered_count'] ?? 0);
+    $openCount = (int)($metrics['open_count'] ?? 0);
+    $clickCount = (int)($metrics['click_count'] ?? 0);
+    $unsubscribeCount = (int)($metrics['unsubscribe_count'] ?? 0);
 
-  {{-- Cards KPI --}}
-  <div class="grid cols-3" style="margin-bottom:16px">
-    
+    $denominatorDelivered = max(1, $deliveredCount);
+    $openRate = round(($openCount / $denominatorDelivered) * 100, 1);
+    $clickRate = round(($clickCount / $denominatorDelivered) * 100, 1);
+    $ctor = $openCount > 0 ? round(($clickCount / $openCount) * 100, 1) : 0;
+  @endphp
 
-    <div class="card">
-      <div class="field">
-        <label><i class="fa-solid fa-paper-plane"></i> Envoyés</label>
-        <div style="font-size:26px;font-weight:700">{{ $metrics['sent'] ?? 0 }}</div>
-      </div>
-      <div class="hint">Tous statuts confondus</div>
-    </div>
+  {{-- PREMIÈRE RANGÉE DE 3 CARTES KPI --}}
+  <div class="grid cols-3 kpi-grid">
 
-    <div class="card">
-      <div class="field">
-        <label><i class="fa-solid fa-envelope-circle-check"></i> Nombre de contacts importés</label>
-        <div style="font-size:26px;font-weight:700">{{ $metrics['nbre_contacts'] }}</div>
-      </div>
-      <div class="hint">Mails acceptés</div>
-    </div>
+    <x-kpi-card
+        icon="fa-users"
+        label="Contacts Importés"
+        value="{{ number_format($importedCount) }}"
+        hint="Taille totale de l'audience."
+    />
 
-    <div class="card">
-      <div class="field">
-        <label><i class="fa-solid fa-envelope-circle-check"></i> Délivrés</label>
-        <div style="font-size:26px;font-weight:700">{{ $metrics['delivered'] ?? 0 }}</div>
-      </div>
-      <div class="hint">Mails acceptés</div>
-    </div>
+    <x-kpi-card
+        icon="fa-envelope-circle-check"
+        label="Emails Délivrés"
+        value="{{ number_format($deliveredCount) }}"
+        hint="{{ number_format($sentCount) }} tentatives d'envoi."
+        progressColor="var(--pri)"
+    />
+
+    <x-kpi-card
+        icon="fa-envelope-open-text"
+        label="Taux d'Ouverture"
+        value="{{ $openRate }}%"
+        progress="{{ $openRate }}"
+        hint="{{ number_format($openCount) }} ouvertures uniques."
+        progressColor="var(--ok)"
+    />
+  </div>
+
+  {{-- DEUXIÈME RANGÉE DE 3 CARTES KPI --}}
+  <div class="grid cols-3 kpi-grid">
+
+    <x-kpi-card
+        icon="fa-mouse-pointer"
+        label="Taux de Clic (CTR)"
+        value="{{ $clickRate }}%"
+        progress="{{ $clickRate }}"
+        hint="{{ number_format($clickCount) }} clics uniques (CTOR : {{ $ctor }}%)."
+        progressColor="var(--warn)"
+    />
+
+    <x-kpi-card
+        icon="fa-user-slash"
+        label="Désinscriptions"
+        value="{{ number_format($unsubscribeCount) }}"
+        hint="Contacts ayant demandé à ne plus recevoir d'emails."
+        progressColor="var(--danger)"
+    />
+
+    {{-- Carte placeholder pour compléter la grille --}}
+    <div class="card kpi-card is-placeholder"></div>
 
   </div>
 
-  <div class="grid cols-3" style="margin-bottom:16px">
-    
-
-    <div class="card">
-      <div class="field">
-        <label><i class="fa-solid fa-envelope-open-text"></i> Taux d’ouverture</label>
-        <div style="display:flex;align-items:center;gap:10px">
-          <progress value="{{ $openRate }}" max="100" style="width:160px"></progress>
-          <strong>{{ $openRate }}%</strong>
-        </div>
-      </div>
-      <div class="hint">{{ $opens }} ouvertures / {{ $del }} délivrés</div>
-    </div>
-
-    <div class="card">
-      <div class="field">
-        <label><i class="fa-solid fa-mouse-pointer"></i> Taux de clic</label>
-        <div style="display:flex;align-items:center;gap:10px">
-          <progress value="{{ $clickRate }}" max="100" style="width:160px"></progress>
-          <strong>{{ $clickRate }}%</strong>
-        </div>
-      </div>
-      <div class="hint">{{ $clicks }} clics / {{ $del }} délivrés (CTR). CTOR: {{ $ctor }}%</div>
-    </div>
-
-    <div class="card">
-      @php
-        $bounces = (int)($metrics['bounces'] ?? 0);
-        $unsubs  = (int)($metrics['unsubscribes'] ?? 0);
-      @endphp
-      <div class="field">
-        <label><i class="fa-solid fa-triangle-exclamation"></i> Bounces & désinscriptions</label>
-        <div class="grid cols-2">
-          <div><strong>{{ $bounces }}</strong><div class="hint">Bounces</div></div>
-          <div><strong>{{ $unsubs }}</strong><div class="hint">Unsubs</div></div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  {{-- Graphiques --}}
-  <div class="grid cols-2">
-    <div class="card">
-      <div class="field">
-        <label><i class="fa-solid fa-chart-line"></i> Ouvertures & clics (par jour)</label>
-        <canvas id="lineChart" height="120"></canvas>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="field">
-        <label><i class="fa-solid fa-chart-pie"></i> Répartition statuts</label>
-        <canvas id="pieChart" height="120"></canvas>
-      </div>
-      <div class="hint">Sends / Delivered / Opens / Clicks / Bounces</div>
-    </div>
-  </div>
 @endsection
 
-@section('scripts')
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script>
-  // Données fournies par le contrôleur
-  const labels = @json($timeseries['labels'] ?? []);
-  const opens  = @json($timeseries['opens']  ?? []);
-  const clicks = @json($timeseries['clicks'] ?? []);
-  const sends  = @json($timeseries['sends']  ?? []);
+@section('styles')
+<style>
+    .kpi-grid {
+        margin-bottom: 16px;
+    }
 
-  // Courbe opens/clicks
-  const ctx1 = document.getElementById('lineChart');
-  if (ctx1 && labels.length) {
-    new Chart(ctx1, {
-      type: 'line',
-      data: {
-        labels,
-        datasets: [
-          { label: 'Ouvertures', data: opens },
-          { label: 'Clics', data: clicks },
-          { label: 'Envois', data: sends }
-        ]
-      },
-      options: {
-        responsive: true,
-        plugins: { legend: { position: 'bottom' } },
-        interaction: { mode: 'index', intersect: false },
-        scales: { y: { beginAtZero: true } }
-      }
-    });
-  }
+    /* Les styles pour .kpi-card, .kpi-header, etc. restent les mêmes */
+    .kpi-card {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+    .kpi-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+    .kpi-icon-wrapper {
+        width: 40px;
+        height: 40px;
+        border-radius: var(--r-sm);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: rgba(255, 255, 255, 0.03);
+        border: 1px solid var(--border);
+        color: var(--icon-color, var(--pri));
+        font-size: 16px;
+    }
+    .kpi-label {
+        font-weight: 600;
+        color: var(--muted);
+    }
+    .kpi-body {
+        flex-grow: 1;
+    }
+    .kpi-value {
+        font-size: 28px;
+        font-weight: 700;
+        color: var(--text);
+    }
+    .kpi-value-with-progress {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+    .kpi-value-with-progress strong.kpi-value {
+        font-size: 24px;
+        order: -1;
+    }
+    .kpi-footer.hint {
+        padding-top: 12px;
+        border-top: 1px solid var(--border);
+        font-size: 12px;
+    }
 
-  // Camembert statuts
-  const ctx2 = document.getElementById('pieChart');
-  if (ctx2) {
-    new Chart(ctx2, {
-      type: 'doughnut',
-      data: {
-        labels: ['Envoyés','Délivrés','Ouvertures','Clics','Bounces'],
-        datasets: [{
-          data: [
-            {{ (int)($metrics['sent'] ?? 0) }},
-            {{ (int)($metrics['delivered'] ?? 0) }},
-            {{ (int)($metrics['opens'] ?? 0) }},
-            {{ (int)($metrics['clicks'] ?? 0) }},
-            {{ (int)($metrics['bounces'] ?? 0) }}
-          ]
-        }]
-      },
-      options: { plugins: { legend: { position: 'bottom' } } }
-    });
-  }
-</script>
+    /* Styles pour les barres de progression */
+    progress {
+        width: 100%;
+        height: 8px;
+        border-radius: 4px;
+        border: none;
+        background-color: var(--border);
+        --progress-color: var(--pri);
+    }
+    progress::-webkit-progress-bar {
+        background-color: var(--border);
+        border-radius: 4px;
+    }
+    progress::-webkit-progress-value {
+        background-color: var(--progress-color);
+        border-radius: 4px;
+        transition: width 0.4s ease-in-out;
+    }
+    progress::-moz-progress-bar {
+        background-color: var(--progress-color);
+        border-radius: 4px;
+    }
+
+    /* Carte placeholder (invisible) */
+    .is-placeholder {
+      background: transparent;
+      border-color: transparent;
+      box-shadow: none;
+    }
+
+    /* --- Amélioration de la grille pour les écrans plus petits (MODIFIÉ) --- */
+    @media (max-width: 1200px) {
+        /* Applique le style 2 colonnes aux grilles de 4 ET 3 */
+        .grid.cols-4, .grid.cols-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+     @media (max-width: 768px) {
+        /* Applique le style 1 colonne à toutes les grilles */
+        .grid.cols-4, .grid.cols-3, .grid.cols-2 { grid-template-columns: 1fr; }
+    }
+</style>
 @endsection
