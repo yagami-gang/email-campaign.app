@@ -504,143 +504,71 @@ Route::get('/cron/send-campaign-emails', function (Request $request) {
                     'messages'    => $messages, // <= paquet de 10 messages
                 ];
 
-              // --- ENVOI REEL DES MAILS ---
-                $resp = null;
-                $ok   = false;
-                $http = 0;
-                $respJson = null;
-
+                // Appel API unique pour le paquet
+                $ok = false;
                 try {
                     if (empty($smtp->url)) {
                         throw new \RuntimeException("SMTP server #{$smtp->id} n'a pas d'URL API configurée.");
                     }
-
                     $headers = ['Content-Type' => 'application/json', 'Accept' => 'application/json'];
                     if (!empty($smtp->api_key)) {
                         $headers['Authorization'] = 'Bearer ' . $smtp->api_key;
                     }
 
-                    $resp     = Http::withHeaders($headers)->timeout(60)->post($smtp->url, $payload);
-                    $http     = $resp->status();
-                    $respJson = $resp->json(); // peut être null si pas du JSON
-                    $ok       = $resp->successful(); // true pour 2xx
+                    ////////// ENVOI REEL DES MAILS ///////////
 
+                    // $resp = Http::withHeaders($headers)->timeout(60)->post($smtp->url, $payload);
+                    // $ok = $resp->successful();
+
+                    /////////// SIMULATION ////////////////////
+
+                        $ok = true;
+                    ////////////  FIN DE LA SIMULATION ///////
+
+                    if (!$ok) {
+                        Log::warning("Envoi batch échoué (HTTP {$resp->status()}) : " . $resp->body());
+                    }
                 } catch (\Throwable $e) {
-                    Log::error("Erreur HTTP (campagne {$campaign->id}, smtp {$smtp->id}) : ".$e->getMessage());
+                    Log::error("Erreur envoi batch (campagne {$campaign->id}, smtp {$smtp->id}) : ".$e->getMessage());
                     $ok = false;
-                    $http = 0;
-                    $respJson = null;
                 }
 
-                // Emails du chunk (pour bornage sécurisé)
+                // Mise à jour des contacts de CE paquet
                 $emailsInChunk = $chunk->pluck('email')->all();
-
-                /**
-                 * 1) Si code HTTP 400/401/403 → marquer le pivot campaign_smtp_server en failed
-                 *    avec le message d’erreur retourné par l’API (clé 'error' ou body brut).
-                 */
-                if (in_array($http, [400, 401, 403], true)) {
-                    $errMsg = is_array($respJson) ? ($respJson['error'] ?? $resp->body()) : ($resp ? $resp->body() : 'Unknown error');
-                    DB::table('campaign_smtp_server')
-                        ->where('campaign_id', $campaign->id)
-                        ->where('smtp_server_id', $smtp->id)
+                if ($ok) {
+                    // Succès: sended + sent_at + id_smtp_server
+                    DB::table($contactsTable)
+                        ->whereIn('email', $emailsInChunk)
                         ->update([
-                            'status'        => 'failed',
-                            'error_message' => Str::limit($errMsg, 1000),
-                            'updated_at'    => now(),
+                            'status'          => 'sended',
+                            'sent_at'         => now(),
+                            'id_smtp_server'  => $smtp->id,
                         ]);
-                }
 
-                /**
-                 * 2) Traitement quand l’appel est 2xx et renvoie un tableau 'results'
-                 *    → updates par email selon la ligne de résultat.
-                 */
-                if ($ok && is_array($respJson) && isset($respJson['results']) && is_array($respJson['results'])) {
+                    $count = count($emailsInChunk);
+                    $sentOk += $count;
 
-                    $results = collect($respJson['results']);
-                    $sentForChunk = 0;
+                    // Incrémente sent_count de la campagne et met à jour la progression
+                    DB::table('campaigns')->where('id', $campaign->id)->increment('sent_count', $count);
+                    $newSent = (int) DB::table('campaigns')->where('id', $campaign->id)->value('sent_count');
 
-                    // a) Mettre à jour chaque email retourné par l’API
-                    foreach ($results as $row) {
-                        $to   = $row['to_email'] ?? null;
-                        $stat = $row['status']   ?? null;
-                        $err  = $row['error']    ?? null;
-
-                        if (!$to || !in_array($to, $emailsInChunk, true)) {
-                            continue; // ne met pas à jour hors chunk
-                        }
-
-                        if ($stat === 'sent') {
-                            DB::table($contactsTable)
-                                ->where('email', $to)
-                                ->update([
-                                    'status'          => 'sended',
-                                    'sent_at'         => now(),
-                                    'delivered_at'    => now(),
-                                    'id_smtp_server'  => $smtp->id,
-                                ]);
-                            $sentForChunk++;
-                            $sentOk++;
-                        } elseif ($stat === 'failed') {
-                            DB::table($contactsTable)
-                                ->where('email', $to)
-                                ->update([
-                                    'status'          => 'fail_smtp',
-                                    'error_message'   => Str::limit((string)$err, 1000),
-                                    'id_smtp_server'  => $smtp->id,
-                                ]);
-                            $sentFail++;
-                        }
+                    if ($campaign->nbre_contacts > 0) {
+                        $progress = (int) floor(($newSent / $campaign->nbre_contacts) * 100);
+                        DB::table('campaigns')->where('id', $campaign->id)->update([
+                            'progress' => min(99, $progress),
+                        ]);
                     }
-
-                    // b) Si certains emails du chunk ne sont pas revenus dans 'results',
-                    //    on les marque en échec HTTP (sécurité)
-                    $returned = $results->pluck('to_email')->filter()->unique()->all();
-                    $missing  = array_values(array_diff($emailsInChunk, $returned));
-                    if (!empty($missing)) {
-                        DB::table($contactsTable)
-                            ->whereIn('email', $missing)
-                            ->update([
-                                'status'          => 'fail_http',
-                                'error_message'   => 'Missing in API results',
-                                'id_smtp_server'  => $smtp->id,
-                            ]);
-                        $sentFail += count($missing);
-                    }
-
-                    // c) Incrémenter sent_count UNIQUEMENT sur les emails 'sent'
-                    if ($sentForChunk > 0) {
-                        DB::table('campaigns')->where('id', $campaign->id)->increment('sent_count', $sentForChunk);
-                        $newSent = (int) DB::table('campaigns')->where('id', $campaign->id)->value('sent_count');
-                        if ($campaign->nbre_contacts > 0) {
-                            $progress = (int) floor(($newSent / $campaign->nbre_contacts) * 100);
-                            DB::table('campaigns')->where('id', $campaign->id)->update([
-                                'progress' => min(99, $progress),
-                            ]);
-                        }
-                    }
-
                 } else {
-                    /**
-                     * 3) Appel non 2xx (ou payload non conforme) → marquer tout le chunk en fail_http.
-                     *    (Tu as quand même le pivot marqué 'failed' si http=400/401/403, plus haut.)
-                     */
-                    $bodySnippet = $resp ? Str::limit((string)$resp->body(), 1000) : 'No response';
+                    // Echec: skiped + id_smtp_server (sent_at reste NULL)
                     DB::table($contactsTable)
                         ->whereIn('email', $emailsInChunk)
                         ->update([
                             'status'          => 'fail_http',
-                            'error_message'   => $bodySnippet,
                             'id_smtp_server'  => $smtp->id,
                         ]);
 
                     $sentFail += count($emailsInChunk);
-
-                    if ($resp && !$ok) {
-                        Log::warning("Envoi batch échoué (HTTP {$http}) : " . $bodySnippet);
-                    }
                 }
-
             }
 
             $report['details'][] = [

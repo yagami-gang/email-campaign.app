@@ -142,7 +142,7 @@ class CampaignController extends Controller
 
         // --- 5. Nombre de désinscriptions ---
         // On compte le nombre de contacts de cette campagne qui sont maintenant dans la blacklist.
-        $metrics['unsubscribe_count'] = DB::table('blacklists')
+        $metrics['unsubscribe_count'] = DB::table('blacklist')
             ->where('campaign_id', $campaign->id)
             ->count();
 
@@ -311,6 +311,8 @@ class CampaignController extends Controller
                     $table->timestamp('opened_at')->nullable();
                     $table->timestamp('clicked_at')->nullable();
                     $table->integer('id_smtp_server')->nullable();
+                    $table->string('error_message')->nullable();
+                    
                 });
             }
 
