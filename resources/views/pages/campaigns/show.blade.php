@@ -73,11 +73,55 @@
         hint="Contacts ayant demandé à ne plus recevoir d'emails."
         progressColor="var(--danger)"
     />
-
-    {{-- Carte placeholder pour compléter la grille --}}
-    <div class="card kpi-card is-placeholder"></div>
-
   </div>
+
+  <div class="card" style="padding:0; margin-top: 24px;">
+    <header class="card-header" style="margin: 22px; padding: 0 0 16px 0;">
+        <h3>Performance par Canal d'Envoi</h3>
+        <p class="hint">Statistiques détaillées pour chaque serveur SMTP utilisé dans cette campagne.</p>
+    </header>
+    <div class="table-responsive-wrapper">
+        <table class="sub-table">
+            <thead>
+                <tr>
+                    <th>Serveur SMTP</th>
+                    <th>Expéditeur</th>
+                    <th style="text-align: right;">Envoyés</th>
+                    <th style="text-align: right;">Délivrés</th>
+                </tr>
+            </thead>
+            <tbody>
+                @forelse($serverStats as $server)
+                    <tr>
+                        <td>
+                            <div class="server-name">
+                                <i class="fa-solid fa-server"></i>
+                                <div>
+                                    <strong>{{ $server->name }}</strong>
+                                    <div class="hint">{{ $server->url }}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="sender-info">
+                                {{ $server->sender_name }}
+                                <div class="hint">{{ $server->sender_email }}</div>
+                            </div>
+                        </td>
+                        <td style="text-align: right;">{{ number_format($server->sent_count) }}</td>
+                        <td style="text-align: right;">{{ number_format($server->delivered_count) }}</td>
+                    </tr>
+                @empty
+                    <tr>
+                        <td colspan="5" style="text-align: center; padding: 24px; color: var(--muted);">
+                            Aucune donnée d'envoi par serveur n'est encore disponible pour cette campagne.
+                        </td>
+                    </tr>
+                @endforelse
+            </tbody>
+        </table>
+    </div>
+</div>
 
 @endsection
 
@@ -177,5 +221,51 @@
         /* Applique le style 1 colonne à toutes les grilles */
         .grid.cols-4, .grid.cols-3, .grid.cols-2 { grid-template-columns: 1fr; }
     }
+    .table-responsive-wrapper {
+    overflow-x: auto;
+}
+
+.sub-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.sub-table th {
+    text-align: left;
+    padding: 12px 22px;
+    color: var(--muted);
+    font-size: 12px;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+    background-color: rgba(0,0,0,0.1);
+}
+
+.sub-table td {
+    padding: 16px 22px;
+    vertical-align: middle;
+    border-bottom: 1px solid var(--border);
+}
+
+.sub-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.server-name {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.server-name i {
+    color: var(--muted);
+}
+
+.sender-info {
+    line-height: 1.3;
+}
+
+.delivery-progress {
+    --progress-color: var(--ok); /* Couleur verte pour la délivrance */
+}
 </style>
 @endsection

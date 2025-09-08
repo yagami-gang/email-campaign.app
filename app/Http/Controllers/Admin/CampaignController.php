@@ -93,17 +93,25 @@ class CampaignController extends Controller
             'click_count'       => 0,
             'unsubscribe_count' => 0,
         ];
+        $serverStats = collect();
 
         // --- On vérifie que la table de contacts existe avant de lancer les requêtes ---
         if (!$campaign->nom_table_contact || !Schema::hasTable($campaign->nom_table_contact)) {
             // Si la table n'existe pas, on renvoie les métriques à zéro pour éviter les erreurs.
-            return view('pages.campaigns.show', compact('campaign', 'metrics'));
+            return view('pages.campaigns.show', compact('campaign', 'metrics','serverStats'));
         }
 
         $contactTableName = $campaign->nom_table_contact;
 
+        if (!$campaign->nom_table_contact || !Schema::hasTable($campaign->nom_table_contact)) {
+            // Ajout d'une variable vide pour les stats des serveurs en cas de sortie anticipée
+            $serverStats = collect();
+            return view('pages.campaigns.show', compact('campaign', 'metrics', 'serverStats'));
+        }
+
         // --- 1. Nombre de contacts importés ---
         $metrics['imported_count'] = DB::table($contactTableName)->count();
+
 
         // --- 2. Calcul des statuts depuis la table de contacts ---
         // Requête unique pour compter 'envoyés' et 'délivrés' selon VOS définitions.
@@ -138,10 +146,38 @@ class CampaignController extends Controller
             ->where('campaign_id', $campaign->id)
             ->count();
 
-        // --- 6. Passer les données à la vue ---
-        return view('pages.campaigns.show', compact('campaign', 'metrics'));
-    }
+        //----- 6. statistique pour les serveurs -------//
+         // Requête unique pour obtenir les stats de tous les serveurs en une seule fois
+         $statsQuery = DB::table($contactTableName)
+         ->select('id_smtp_server',
+             DB::raw("COUNT(*) as sent_count"), // Total des contacts assignés à ce serveur
+             DB::raw("COUNT(CASE WHEN status = 'sended' THEN 1 END) as delivered_count") // Total des délivrés
+         )
+         ->whereNotNull('id_smtp_server')
+         ->groupBy('id_smtp_server')
+         ->get()
+         ->keyBy('id_smtp_server'); // La clé est l'ID du serveur pour un accès facile
 
+     // On charge les serveurs SMTP de la campagne avec les infos de la table pivot
+        $smtpServers = $campaign->smtpServers()->withPivot('sender_name', 'sender_email')->get();
+
+        // On fusionne les informations de base avec les statistiques calculées
+        $serverStats = $smtpServers->map(function ($server) use ($statsQuery) {
+            $stats = $statsQuery->get($server->id);
+
+            return (object) [
+                'name' => $server->name,
+                'url' => $server->url,
+                'sender_name' => $server->pivot->sender_name,
+                'sender_email' => $server->pivot->sender_email,
+                'sent_count' => $stats->sent_count ?? 0,
+                'delivered_count' => $stats->delivered_count ?? 0,
+            ];
+        });
+
+        // --- 7. Passer les données à la vue ---
+        return view('pages.campaigns.show', compact('campaign', 'metrics','serverStats'));
+    }
     /**
      * Affiche le formulaire pour éditer une campagne existante et liste les fichiers JSON disponibles.
      */
