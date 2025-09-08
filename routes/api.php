@@ -340,7 +340,7 @@ Route::get('/cron/send-campaign-emails', function (Request $request) {
 
         $report['campaigns_started']++;
 
-        
+
         $today = Carbon::today();
 
         foreach ($campaign->smtpServers as $smtp) {
@@ -445,11 +445,11 @@ Route::get('/cron/send-campaign-emails', function (Request $request) {
                         'id_contact'   => $contact->id,
                     ]);
                     $html = $html . "<img src=\"{$trackingPixelUrl}\" alt=\"\" width=\"1\" height=\"1\" style=\"display:none;\"/>";
-                    
+
                     /**
                      * Traite et raccourcit les URLs pour le suivi des clics.
                      */
-                
+
                     $html = preg_replace_callback('/<a[^>]*href="([^"]+)"[^>]*>/i', function($matches) use ($campaign, $contact) {
                         $originalUrl = $matches[1];
                         // Ne pas tracker les liens de désinscription ou les ancres
@@ -473,10 +473,10 @@ Route::get('/cron/send-campaign-emails', function (Request $request) {
                     /**
                      * Ajoute le lien de désinscription.
                      */
-                    $unsubscribeUrl = route('unsubscribe.form', ['encryptedEmail' => encrypt($contact->email)]);
+                    $unsubscribeUrl = route('unsubscribe.form', ['encryptedEmail' => encrypt($contact->email), 'campaign_id'=> $campaign->id,]);
                     $html = $html . "<p style='text-align:center; font-size:10px;'><a href=\"{$unsubscribeUrl}\">Se désinscrire</a></p>";
 
-                
+
 
                     $messages[] = [
                         'to_email' => $contact->email,
@@ -542,7 +542,7 @@ Route::get('/cron/send-campaign-emails', function (Request $request) {
                     // Incrémente sent_count de la campagne et met à jour la progression
                     DB::table('campaigns')->where('id', $campaign->id)->increment('sent_count', $count);
                     $newSent = (int) DB::table('campaigns')->where('id', $campaign->id)->value('sent_count');
-                    
+
                     if ($campaign->nbre_contacts > 0) {
                         $progress = (int) floor(($newSent / $campaign->nbre_contacts) * 100);
                         DB::table('campaigns')->where('id', $campaign->id)->update([

@@ -105,19 +105,20 @@ class BlacklistController extends Controller
      * @param string $encryptedEmail L'email crypté de l'utilisateur.
      * @return \Illuminate\View\View|\Illuminate\Http\RedirectResponse
      */
-    public function unsubscribeForm(string $encryptedEmail)
+    public function unsubscribeForm(string $encryptedEmail, int $campaign_id )
     {
         try {
             $email = Crypt::decryptString($encryptedEmail);
         } catch (DecryptException $e) {
-            Log::warning('Tentative d\'accès à un lien de désinscription avec un email invalide: ' . $encryptedEmail);
-            return redirect('/')->with('error', 'Lien de désinscription invalide.'); // Redirige vers la page d'accueil ou une page d'erreur
+            Log::warning('Tentative d\'accès à un lien de désinscription invalide: ' . $encryptedEmail);
+            return redirect('/')->with('error', 'Lien de désinscription invalide ou expiré.');
         }
-        
+
         // Vérifie si l'email est déjà en blacklist
         $isBlacklisted = Blacklist::where('email', $email)->exists();
 
-        return view('unsubscribe.index', compact('email', 'encryptedEmail', 'isBlacklisted'));
+        // On passe toutes les informations nécessaires à la vue
+        return view('unsubscribe.index', compact('email', 'encryptedEmail', 'isBlacklisted', 'campaign_id'));
     }
 
     /**
@@ -128,27 +129,38 @@ class BlacklistController extends Controller
      */
     public function unsubscribe(Request $request)
     {
-        $request->validate([
+        // On valide les données reçues du formulaire
+        $validated = $request->validate([
             'encrypted_email' => 'required|string',
+            'campaign_id' => 'nullable|exists:campaigns,id', // Valide l'ID de la campagne
         ]);
 
         try {
-            $email = Crypt::decryptString($request->encrypted_email);
+            $email = Crypt::decryptString($validated['encrypted_email']);
         } catch (DecryptException $e) {
-            Log::error('Erreur de décryptage lors de la désinscription: ' . $request->encrypted_email);
-            return redirect('/')->with('error', 'Lien de désinscription invalide.');
+            Log::error('Erreur de décryptage lors de la désinscription: ' . $validated['encrypted_email']);
+            return redirect('/')->with('error', 'Une erreur est survenue. Veuillez réessayer.');
         }
 
-        // Vérifie si l'email n'est pas déjà en blacklist
-        if (!Blacklist::where('email', $email)->exists()) {
-            Blacklist::create([
-                'email' => $email,
+        // Utilise updateOrCreate pour une gestion robuste des doublons
+        Blacklist::updateOrCreate(
+            ['email' => $email], // Condition pour trouver l'enregistrement
+            [
+                // Données à insérer ou à mettre à jour
+                'campaign_id' => $validated['campaign_id'], // On stocke l'ID de la campagne
                 'blacklisted_at' => now(),
-                // 'template_id' => null, // On ne peut pas savoir quel template a causé ça ici
-            ]);
-            return redirect('/')->with('success', 'Vous avez été désinscrit avec succès !');
-        }
+            ]
+        );
 
-        return redirect('/')->with('info', 'Vous êtes déjà désinscrit.');
+        // On peut créer une route dédiée pour la page de succès
+        return redirect()->route('unsubscribe.success')->with('status', 'Vous avez été désinscrit avec succès !');
+    }
+
+    /**
+     * Affiche une simple page de confirmation.
+     */
+    public function unsubscribeSuccess()
+    {
+        return view('unsubscribe.success');
     }
 }

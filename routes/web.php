@@ -23,10 +23,11 @@ Route::get('/', function () {
 
 
 // Les routes publiques (non authentifiées)
-Route::get('/unsubscribe/{encryptedEmail}', [BlacklistController::class, 'unsubscribeForm'])->name('unsubscribe.form');
+Route::get('/unsubscribe/{encryptedEmail}/{campaign_id}', [BlacklistController::class, 'unsubscribeForm'])->name('unsubscribe.form');
 Route::post('/unsubscribe', [BlacklistController::class, 'unsubscribe'])->name('unsubscribe.process');
+Route::get('/unsubscribe/success', [BlacklistController::class, 'unsubscribeSuccess'])->name('unsubscribe.success');
 // Routes pour les services de tracking (publiques)
-Route::get('/track/open/{contactTable}/{id_contact}', [TrackingController::class, 'open'])->name('track.open'); 
+Route::get('/track/open/{contactTable}/{id_contact}', [TrackingController::class, 'open'])->name('track.open');
 Route::get('/l/{shortCode}', [TrackingController::class, 'click'])->name('track.click');
 
 // Les routes de l'admin devraient être protégées par un middleware d'authentification et un préfixe

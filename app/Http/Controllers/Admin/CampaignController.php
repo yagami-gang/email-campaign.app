@@ -127,8 +127,8 @@ class CampaignController extends Controller
 
         // --- 4. Nombre de clics uniques ---
         $metrics['click_count'] = DB::table('tracking_clicks')
-            ->join($contactTableName, 'tracking_clicks.contact_email', '=', $contactTableName . '.email')
-            ->where('tracking_clicks.campaign_id', $campaign->id)
+            ->join($contactTableName, 'tracking_clicks.id_contact', '=', $contactTableName . '.id')
+            ->where('tracking_clicks.id_campagne', $campaign->id)
             ->distinct($contactTableName . '.id')
             ->count($contactTableName . '.id');
 
