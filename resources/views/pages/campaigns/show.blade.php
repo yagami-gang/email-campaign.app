@@ -89,6 +89,7 @@
                     <th style="text-align: right;">Envoyés</th>
                     <th style="text-align: right;">Délivrés</th>
                     <th style="text-align: right;">statut</th>
+                    <th style="text-align: right;">message</th>
                 </tr>
             </thead>
             <tbody>
@@ -111,7 +112,7 @@
                         </td>
                         <td style="text-align: right;">{{ number_format($server->sent_count) }}</td>
                         <td style="text-align: right;">{{ number_format($server->delivered_count) }}</td>
-                        <td style="text-align: right;">{{ number_format($server->status) }}</td>
+                        <td style="text-align: right;">{{ $server->status }}</td>
                         @if (($server->status == 'failed' ))
                             <td style="text-align: right;">{{ $server->error_message }}</td>
                         @else

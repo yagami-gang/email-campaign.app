@@ -310,10 +310,22 @@ Route::get('/api/cron/send-campaign-emails', function (Request $request) {
     foreach ($campaigns as $campaign) {
         if ($campaign->smtpServers->isEmpty()) {
             Log::warning("Campagne #{$campaign->id} sans serveurs SMTP. Passage.");
+            $campaign->update([
+                'status'        => 'failed',
+                'error_message' => "Serveur SMTP absent"
+            ]);
             continue;
         }
 
         $contactsTable = $campaign->nom_table_contact;
+
+        if( $contactsTable == null ){
+            $campaign->update([
+                'status'        => 'failed',
+                'error_message' => "table contacts absente"
+            ]);
+            continue;
+        }
 
         // si le nombre limit de shoot est atteint pour une campagne
         $count = DB::table($contactsTable)
@@ -360,11 +372,11 @@ Route::get('/api/cron/send-campaign-emails', function (Request $request) {
                 }
             }
 
-            if ($p->status == 'failed') {
+            if ( in_array($p->status, ['failed', 'paused', 'canceled']) ) {
                 $report['details'][] = [
                     'campaign_id' => $campaign->id,
                     'smtp_id'     => $smtp->id,
-                    'status'      => $p->error_message,
+                    'status'      => ($p->status=='failed' ? 'failed : '.$p->error_message : $p->status),
                 ];
                 continue;
             }
@@ -539,22 +551,6 @@ Route::get('/api/cron/send-campaign-emails', function (Request $request) {
                 $emailsInChunk = $chunk->pluck('email')->all();
 
                 /**
-                 * 1) Si code HTTP 400/401/403 → marquer le pivot campaign_smtp_server en failed
-                 *    avec le message d’erreur retourné par l’API (clé 'error' ou body brut).
-                 */
-                if (in_array($http, [400, 401, 403], true)) {
-                    $errMsg = is_array($respJson) ? ($respJson['error'] ?? $resp->body()) : ($resp ? $resp->body() : 'Unknown error');
-                    DB::table('campaign_smtp_server')
-                        ->where('campaign_id', $campaign->id)
-                        ->where('smtp_server_id', $smtp->id)
-                        ->update([
-                            'status'        => 'failed',
-                            'error_message' => Str::limit($errMsg, 250),
-                            'updated_at'    => now(),
-                        ]);
-                }
-
-                /**
                  * 2) Traitement quand l’appel est 2xx et renvoie un tableau 'results'
                  *    → updates par email selon la ligne de résultat.
                  */
@@ -628,20 +624,40 @@ Route::get('/api/cron/send-campaign-emails', function (Request $request) {
                      * 3) Appel non 2xx (ou payload non conforme) → marquer tout le chunk en fail_http.
                      *    (Tu as quand même le pivot marqué 'failed' si http=400/401/403, plus haut.)
                      */
-                    $bodySnippet = $resp ? $resp->body() : 'No response : '.$http;
+
+                    $errMsg = $resp ? $resp->body() : "Appel API échoué (HTTP {$http})";
+
+                    if (in_array($http, [400, 401, 403], true)) {
+                        $errMsg = is_array($respJson) ? ($respJson['error'] ?? $resp->body()) : ($resp ? $resp->body() : "Appel API échoué (HTTP {$http})");
+                        $errMsg = "Code HTTP: {$http} - ".$errMsg;  
+                    }
+
+                    
                     DB::table($contactsTable)
                         ->whereIn('email', $emailsInChunk)
                         ->update([
                             'sent_at'         => now(),
                             'status'          => 'fail_http',
-                            'error_message'   => $bodySnippet,
+                            'error_message'   => Str::limit($errMsg, 250),
                             'id_smtp_server'  => $smtp->id,
                         ]);
+
+                    
+                    DB::table('campaign_smtp_server')
+                        ->where('campaign_id', $campaign->id)
+                        ->where('smtp_server_id', $smtp->id)
+                        ->update([
+                            'status'        => 'failed',
+                            'error_message' => Str::limit($errMsg, 250),
+                            'updated_at'    => now(),
+                        ]);
+                    
+                    
 
                     $sentFail += count($emailsInChunk);
 
                     if ($resp && !$ok) {
-                        Log::warning("Envoi batch échoué (HTTP {$http}) : " . $bodySnippet);
+                        Log::warning("Envoi batch échoué (HTTP {$http}) - campaign({$campaign->id}) - smtp({$smtp->id}) " . $bodySnippet);
                     }
                 }
             }
