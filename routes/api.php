@@ -285,7 +285,7 @@ Route::get('/api/cron/import-json-files', function (Request $request) {
  */
 
 
-Route::get('/cron/send-campaign-emails', function (Request $request) {
+Route::get('/api/cron/send-campaign-emails', function (Request $request) {
     // (Optionnel) Protéger la route:
     // if ($request->header('X-CRON-TOKEN') !== env('CRON_TOKEN')) abort(403);
 
@@ -406,7 +406,10 @@ Route::get('/cron/send-campaign-emails', function (Request $request) {
                 ->select('c.*')
                 ->leftJoin('blacklist as b', 'c.email', '=', 'b.email')
                 ->whereNull('b.id')
-                ->whereNull('c.status')
+                //->whereNull('c.status')
+                ->where(function($q){
+                    $q->whereNull('c.status')->orWhere('c.status', 'fail_http');
+                })
                 ->limit($toSend)
                 ->get();
 
@@ -546,7 +549,7 @@ Route::get('/cron/send-campaign-emails', function (Request $request) {
                         ->where('smtp_server_id', $smtp->id)
                         ->update([
                             'status'        => 'failed',
-                            'error_message' => Str::limit($errMsg, 1000),
+                            'error_message' => Str::limit($errMsg, 250),
                             'updated_at'    => now(),
                         ]);
                 }
@@ -586,7 +589,7 @@ Route::get('/cron/send-campaign-emails', function (Request $request) {
                                 ->where('email', $to)
                                 ->update([
                                     'status'          => 'fail_smtp',
-                                    'error_message'   => Str::limit((string)$err, 1000),
+                                    'error_message'   => Str::limit((string)$err, 250),
                                     'id_smtp_server'  => $smtp->id,
                                 ]);
                             $sentFail++;
@@ -625,10 +628,11 @@ Route::get('/cron/send-campaign-emails', function (Request $request) {
                      * 3) Appel non 2xx (ou payload non conforme) → marquer tout le chunk en fail_http.
                      *    (Tu as quand même le pivot marqué 'failed' si http=400/401/403, plus haut.)
                      */
-                    $bodySnippet = $resp ? Str::limit((string)$resp->body(), 1000) : 'No response';
+                    $bodySnippet = $resp ? $resp->body() : 'No response : '.$http;
                     DB::table($contactsTable)
                         ->whereIn('email', $emailsInChunk)
                         ->update([
+                            'sent_at'         => now(),
                             'status'          => 'fail_http',
                             'error_message'   => $bodySnippet,
                             'id_smtp_server'  => $smtp->id,
@@ -640,7 +644,6 @@ Route::get('/cron/send-campaign-emails', function (Request $request) {
                         Log::warning("Envoi batch échoué (HTTP {$http}) : " . $bodySnippet);
                     }
                 }
-
             }
 
             $report['details'][] = [
@@ -658,7 +661,10 @@ Route::get('/cron/send-campaign-emails', function (Request $request) {
         $remaining = DB::table($contactsTable . ' as c')
             ->leftJoin('blacklist as b', 'c.email', '=', 'b.email')
             ->whereNull('b.id')
-            ->whereNull('c.status')
+            //->whereNull('c.status')
+            ->where(function($q){
+                $q->whereNull('c.status')->orWhere('c.status', 'fail_http');
+            })
             ->exists();
 
         if (!$remaining) {

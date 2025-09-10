@@ -39,15 +39,16 @@
                                     'scheduled' => ['label' => 'Planifiée', 'class' => 'status-scheduled'],
                                     'running'   => ['label' => 'En cours', 'class' => 'status-running'],
                                     'paused'    => ['label' => 'En pause', 'class' => 'status-paused'],
-                                    'completed' => ['label' => 'Terminée', 'class' => 'status-completed'],
+                                    'completed' => ['label' => 'Campagne Terminée', 'class' => 'status-completed'],
                                     'failed'    => ['label' => 'Échec', 'class' => 'status-failed'],
                                     'importing'    => ['label' => 'En cours d\'importation', 'class' => 'status-running'],
                                     'imported'    => ['label' => 'Importation terminée', 'class' => 'status-scheduled'],
                                 ];
                                 $current = $statusMap[$c->status] ?? ['label' => $c->status, 'class' => ''];
+                                $style_color_green = "style=color:green";
                             @endphp
                             <span class="badge {{ $current['class'] }}">
-                                <i class="fa-solid fa-circle"></i> {{ $current['label'] }}
+                                <i class="fa-solid fa-circle" {{ $c->status=='active' ? $style_color_green : '' }}></i> {{ $current['label'] }}
                             </span>
                         </td>
                         <td>
