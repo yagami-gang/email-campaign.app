@@ -159,7 +159,7 @@ class CampaignController extends Controller
          ->keyBy('id_smtp_server'); // La clé est l'ID du serveur pour un accès facile
 
      // On charge les serveurs SMTP de la campagne avec les infos de la table pivot
-        $smtpServers = $campaign->smtpServers()->withPivot('sender_name', 'sender_email')->get();
+        $smtpServers = $campaign->smtpServers()->withPivot('sender_name', 'sender_email','status','error_message')->get();
 
         // On fusionne les informations de base avec les statistiques calculées
         $serverStats = $smtpServers->map(function ($server) use ($statsQuery) {
@@ -170,6 +170,8 @@ class CampaignController extends Controller
                 'url' => $server->url,
                 'sender_name' => $server->pivot->sender_name,
                 'sender_email' => $server->pivot->sender_email,
+                'status'=> $server->pivot->status,
+                'error_message' => $server->pivot->error_message,
                 'sent_count' => $stats->sent_count ?? 0,
                 'delivered_count' => $stats->delivered_count ?? 0,
             ];
@@ -178,6 +180,35 @@ class CampaignController extends Controller
         // --- 7. Passer les données à la vue ---
         return view('pages.campaigns.show', compact('campaign', 'metrics','serverStats'));
     }
+
+    /**
+     * Affiche une liste paginée des contacts pour une campagne spécifique.
+     *
+     * @param  \App\Models\Campaign  $campaign
+     * @return \Illuminate\View\View|\Illuminate\Http\RedirectResponse
+     */
+    public function showContacts(Campaign $campaign)
+    {
+        // Étape de sécurité cruciale : vérifier que la table de contacts existe.
+        if (!$campaign->nom_table_contact || !Schema::hasTable($campaign->nom_table_contact)) {
+            return redirect()
+                ->route('admin.campaigns.index')
+                ->with('error', 'La table de contacts pour cette campagne est introuvable ou n\'a pas encore été générée.');
+        }
+
+        $contactTableName = $campaign->nom_table_contact;
+
+        // On utilise la pagination pour gérer efficacement un grand nombre de contacts.
+        // On récupère 50 contacts par page, triés par ID décroissant.
+        $contacts = DB::table($contactTableName)
+            ->orderBy('id', 'desc')
+            ->paginate(50);
+
+        // On passe la campagne et la liste paginée des contacts à la vue.
+        return view('pages.campaigns.contacts', compact('campaign', 'contacts'));
+    }
+
+    
     /**
      * Affiche le formulaire pour éditer une campagne existante et liste les fichiers JSON disponibles.
      */
@@ -312,7 +343,7 @@ class CampaignController extends Controller
                     $table->timestamp('clicked_at')->nullable();
                     $table->integer('id_smtp_server')->nullable();
                     $table->string('error_message')->nullable();
-                    
+
                 });
             }
 
