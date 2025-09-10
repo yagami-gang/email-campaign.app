@@ -180,6 +180,35 @@ class CampaignController extends Controller
         // --- 7. Passer les données à la vue ---
         return view('pages.campaigns.show', compact('campaign', 'metrics','serverStats'));
     }
+
+    /**
+     * Affiche une liste paginée des contacts pour une campagne spécifique.
+     *
+     * @param  \App\Models\Campaign  $campaign
+     * @return \Illuminate\View\View|\Illuminate\Http\RedirectResponse
+     */
+    public function showContacts(Campaign $campaign)
+    {
+        // Étape de sécurité cruciale : vérifier que la table de contacts existe.
+        if (!$campaign->nom_table_contact || !Schema::hasTable($campaign->nom_table_contact)) {
+            return redirect()
+                ->route('admin.campaigns.index')
+                ->with('error', 'La table de contacts pour cette campagne est introuvable ou n\'a pas encore été générée.');
+        }
+
+        $contactTableName = $campaign->nom_table_contact;
+
+        // On utilise la pagination pour gérer efficacement un grand nombre de contacts.
+        // On récupère 50 contacts par page, triés par ID décroissant.
+        $contacts = DB::table($contactTableName)
+            ->orderBy('id', 'desc')
+            ->paginate(50);
+
+        // On passe la campagne et la liste paginée des contacts à la vue.
+        return view('pages.campaigns.contacts', compact('campaign', 'contacts'));
+    }
+
+    
     /**
      * Affiche le formulaire pour éditer une campagne existante et liste les fichiers JSON disponibles.
      */

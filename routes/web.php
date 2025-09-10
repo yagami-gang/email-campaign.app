@@ -56,6 +56,8 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     Route::post('campaigns/{campaign}/resume', [CampaignController::class, 'resume'])->name('campaigns.resume');
     Route::delete('campaigns/{campaign}/delete', [CampaignController::class, 'destroy'])->name('campaigns.destroy');
 
+    // Nouvelle route pour récupérer les contacts associés à une campagne
+    Route::get('campaigns/{campaign}/contacts', [CampaignController::class, 'showContacts'])->name('campaigns.contacts');
     // Nouvelle route pour récupérer la progression d'envoi d'une campagne
     Route::get('campaigns/{id}/progress', [CampaignController::class, 'getSendProgress'])->name('campaigns.progress');
 

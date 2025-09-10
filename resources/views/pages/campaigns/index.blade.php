@@ -7,6 +7,19 @@
         <h2 style="margin:0">Campagnes</h2>
         <a class="btn" href="{{ route('admin.campaigns.create') }}"><i class="fa-solid fa-plus"></i> Nouvelle campagne</a>
     </div>
+    
+    @if (session('success'))
+        <div class="alert alert-success mb-4">
+            <i class="fa-solid fa-check-circle"></i>
+            <span>{{ session('success') }}</span>
+        </div>
+    @endif
+    @if (session('error'))
+        <div class="alert alert-danger mb-4">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+            <span>{{ session('error') }}</span>
+        </div>
+    @endif
 
     <div class="card" style="padding:0;">
         <table id="campaigns-table" class="display" style="width:100%">
@@ -66,6 +79,9 @@
                                 <div class="dropdown-menu">
                                     <a class="dropdown-item" href="{{ route('admin.campaigns.show', $c->id) }}">
                                         <i class="fa-solid fa-eye"></i> Voir
+                                    </a>
+                                    <a class="dropdown-item" href="{{ route('admin.campaigns.contacts', $c->id) }}">
+                                        <i class="fa-solid fa-users"></i> Voir les contacts
                                     </a>
                                     <a class="dropdown-item" href="{{ route('admin.campaigns.edit', $c->id) }}">
                                         <i class="fa-solid fa-pencil"></i> Editer
