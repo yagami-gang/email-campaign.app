@@ -159,7 +159,7 @@ class CampaignController extends Controller
          ->keyBy('id_smtp_server'); // La clé est l'ID du serveur pour un accès facile
 
      // On charge les serveurs SMTP de la campagne avec les infos de la table pivot
-        $smtpServers = $campaign->smtpServers()->withPivot('sender_name', 'sender_email')->get();
+        $smtpServers = $campaign->smtpServers()->withPivot('sender_name', 'sender_email','status','error_message')->get();
 
         // On fusionne les informations de base avec les statistiques calculées
         $serverStats = $smtpServers->map(function ($server) use ($statsQuery) {
@@ -170,6 +170,8 @@ class CampaignController extends Controller
                 'url' => $server->url,
                 'sender_name' => $server->pivot->sender_name,
                 'sender_email' => $server->pivot->sender_email,
+                'status'=> $server->pivot->status,
+                'error_message' => $server->pivot->error_message,
                 'sent_count' => $stats->sent_count ?? 0,
                 'delivered_count' => $stats->delivered_count ?? 0,
             ];
@@ -312,7 +314,7 @@ class CampaignController extends Controller
                     $table->timestamp('clicked_at')->nullable();
                     $table->integer('id_smtp_server')->nullable();
                     $table->string('error_message')->nullable();
-                    
+
                 });
             }
 
