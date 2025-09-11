@@ -114,7 +114,7 @@
     .btn.danger{background:linear-gradient(180deg,rgba(239,68,68,.18),rgba(239,68,68,.05));color:#fecaca}
     [data-theme="light"] .btn{ color:#0f172a }
 
-    table.dataTable{background:transparent;border-radius:12px;overflow:hidden}
+    table.dataTable{background:transparent;border-radius:12px;}
     table.dataTable thead th{background:#0d1324;color:#c7d2fe}
     [data-theme="light"] table.dataTable thead th{background:#e5e7eb;color:#0f172a}
     table.dataTable td, table.dataTable th{border-color:var(--border)}
@@ -155,7 +155,7 @@
     }
     .dropdown-toggle:hover { background: rgba(255,255,255,0.05); color: var(--text); }
     .dropdown-menu {
-        display: none; position: relative; right: 0; top: 110%;
+        display: none; right: 0; top: 110%;
         background-color: var(--sidebar); min-width: 180px; box-shadow: var(--shadow);
         z-index: 1000; border-radius: var(--r-sm); border: 1px solid var(--border);
         overflow: hidden; padding: 6px;
@@ -166,6 +166,7 @@
     pointer-events: none; /* Empêche l'interaction quand il est caché */
     }
     .dropdown-menu.show {
+        position:absolute;
         display: block;
         transform: scale(1);
         opacity: 1;

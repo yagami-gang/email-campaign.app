@@ -7,7 +7,7 @@
         <h2 style="margin:0">Campagnes</h2>
         <a class="btn" href="{{ route('admin.campaigns.create') }}"><i class="fa-solid fa-plus"></i> Nouvelle campagne</a>
     </div>
-    
+
     @if (session('success'))
         <div class="alert alert-success mb-4">
             <i class="fa-solid fa-check-circle"></i>
@@ -48,20 +48,16 @@
                         <td>
                             @php
                                 $statusMap = [
-                                    'draft'     => ['label' => 'Brouillon', 'class' => 'status-draft'],
-                                    'scheduled' => ['label' => 'Planifiée', 'class' => 'status-scheduled'],
-                                    'running'   => ['label' => 'En cours', 'class' => 'status-running'],
+                                    'pending' => ['label' => 'En attente', 'class' => 'status-scheduled'],
+                                    'active'   => ['label' => 'En cours', 'class' => 'status-running'],
                                     'paused'    => ['label' => 'En pause', 'class' => 'status-paused'],
-                                    'completed' => ['label' => 'Campagne Terminée', 'class' => 'status-completed'],
+                                    'completed' => ['label' => 'Terminée', 'class' => 'status-completed'],
                                     'failed'    => ['label' => 'Échec', 'class' => 'status-failed'],
-                                    'importing'    => ['label' => 'En cours d\'importation', 'class' => 'status-running'],
-                                    'imported'    => ['label' => 'Importation terminée', 'class' => 'status-scheduled'],
                                 ];
                                 $current = $statusMap[$c->status] ?? ['label' => $c->status, 'class' => ''];
-                                $style_color_green = "style=color:green";
                             @endphp
                             <span class="badge {{ $current['class'] }}">
-                                <i class="fa-solid fa-circle" {{ $c->status=='active' ? $style_color_green : '' }}></i> {{ $current['label'] }}
+                                <i class="fa-solid fa-circle"></i> {{ $current['label'] }}
                             </span>
                         </td>
                         <td>
@@ -90,16 +86,16 @@
 
                                     <div class="dropdown-divider"></div>
 
-                                    <button class="dropdown-item campaign-action-btn" data-action="launch" data-id="{{ $c->id }}" data-name="{{ $c->name }}" data-allowed-status="paused,pending">
+                                    <button class="dropdown-item campaign-action-btn" data-action="launch" data-id="{{ $c->id }}" data-name="{{ $c->name }}" data-allowed-status="">
                                         <i class="fa-solid fa-play"></i> Lancer
                                     </button>
-                                    <button class="dropdown-item campaign-action-btn" data-action="pause" data-id="{{ $c->id }}" data-name="{{ $c->name }}" data-allowed-status="running">
+                                    <button class="dropdown-item campaign-action-btn" data-action="pause" data-id="{{ $c->id }}" data-name="{{ $c->name }}" data-allowed-status="active">
                                         <i class="fa-solid fa-pause"></i> Mettre en pause
                                     </button>
-                                    <button class="dropdown-item campaign-action-btn" data-action="resume" data-id="{{ $c->id }}" data-name="{{ $c->name }}" data-allowed-status="paused">
+                                    <button class="dropdown-item campaign-action-btn" data-action="resume" data-id="{{ $c->id }}" data-name="{{ $c->name }}" data-allowed-status="paused,failed">
                                         <i class="fa-solid fa-sync"></i> Reprendre
                                     </button>
-                                    <button class="dropdown-item danger campaign-action-btn" data-action="delete" data-id="{{ $c->id }}" data-name="{{ $c->name }}" data-allowed-status="pending,scheduled,completed,failed,paused">
+                                    <button class="dropdown-item danger campaign-action-btn" data-action="delete" data-id="{{ $c->id }}" data-name="{{ $c->name }}" data-allowed-status="pending">
                                         <i class="fa-solid fa-trash"></i> Supprimer
                                     </button>
                                 </div>
