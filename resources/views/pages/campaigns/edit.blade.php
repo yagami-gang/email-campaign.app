@@ -113,9 +113,9 @@
             <tbody id="smtpRows">
                 @php
                 // Logique pour récupérer les anciennes données en cas d'erreur de validation
-                $smtpRows = old('smtp_rows', $campaign->smtpServers->map(function($srv) {
+                $smtpRows = old('apiEndpoint_rows', $campaign->apiEndpoints->map(function($srv) {
                   return [
-                    'smtp_server_id' => $srv->id, 'sender_name' => $srv->pivot->sender_name,
+                    'api_endpoint_id' => $srv->id, 'sender_name' => $srv->pivot->sender_name,
                     'sender_email' => $srv->pivot->sender_email, 'send_frequency_minutes' => $srv->pivot->send_frequency_minutes,
                     'max_daily_sends' => $srv->pivot->max_daily_sends,
                     'scheduled_at' => $srv->pivot->scheduled_at ? \Carbon\Carbon::parse($srv->pivot->scheduled_at)->format('Y-m-d\TH:i') : null,
@@ -124,18 +124,18 @@
               @endphp
               @forelse($smtpRows as $i => $r)
                 <tr class="smtp-row">
-                  <td><input type="text" name="smtp_rows[{{ $i }}][sender_name]" value="{{ $r['sender_name'] ?? '' }}" @disabled($isLocked) required></td>
-                  <td><input type="email" name="smtp_rows[{{ $i }}][sender_email]" value="{{ $r['sender_email'] ?? '' }}" @disabled($isLocked) required></td>
+                  <td><input type="text" name="apiEndpoint_rows[{{ $i }}][sender_name]" value="{{ $r['sender_name'] ?? '' }}" @disabled($isLocked) required></td>
+                  <td><input type="email" name="apiEndpoint_rows[{{ $i }}][sender_email]" value="{{ $r['sender_email'] ?? '' }}" @disabled($isLocked) required></td>
                   <td>
-                    <select name="smtp_rows[{{ $i }}][smtp_server_id]" @disabled($isLocked) required>
-                      @foreach($smtpServers as $opt)
-                        <option value="{{ $opt->id }}" @selected(($r['smtp_server_id'] ?? null) == $opt->id)>{{ $opt->name }}</option>
+                    <select name="apiEndpoint_rows[{{ $i }}][api_endpoint_id]" @disabled($isLocked) required>
+                      @foreach($apiEndpoints as $opt)
+                        <option value="{{ $opt->id }}" @selected(($r['api_endpoint_id'] ?? null) == $opt->id)>{{ $opt->name }}</option>
                       @endforeach
                     </select>
                   </td>
-                  <td><input type="number" min="1" step="1" name="smtp_rows[{{ $i }}][send_frequency_minutes]" value="{{ $r['send_frequency_minutes'] ?? '' }}" placeholder="Ex: 5"></td>
-                  <td><input type="number" min="1" step="1" name="smtp_rows[{{ $i }}][max_daily_sends]" value="{{ $r['max_daily_sends'] ?? '' }}" placeholder="Ex: 1000"></td>
-                  <td><input type="datetime-local" name="smtp_rows[{{ $i }}][scheduled_at]" value="{{ $r['scheduled_at'] ?? '' }}"></td>
+                  <td><input type="number" min="1" step="1" name="apiEndpoint_rows[{{ $i }}][send_frequency_minutes]" value="{{ $r['send_frequency_minutes'] ?? '' }}" placeholder="Ex: 5"></td>
+                  <td><input type="number" min="1" step="1" name="apiEndpoint_rows[{{ $i }}][max_daily_sends]" value="{{ $r['max_daily_sends'] ?? '' }}" placeholder="Ex: 1000"></td>
+                  <td><input type="datetime-local" name="apiEndpoint_rows[{{ $i }}][scheduled_at]" value="{{ $r['scheduled_at'] ?? '' }}"></td>
                   <td class="table-actions">
                     <button type="button" class="btn danger btn-icon del-row" title="Retirer cette ligne" @disabled($isLocked)><i class="fa-solid fa-trash"></i></button>
                   </td>
@@ -191,8 +191,8 @@
       <td><input type="text" name="__NAME__[sender_name]" required></td>
       <td><input type="email" name="__NAME__[sender_email]" required></td>
       <td>
-        <select name="__NAME__[smtp_server_id]" required>
-          @foreach($smtpServers as $opt)
+        <select name="__NAME__[api_endpoint_id]" required>
+          @foreach($apiEndpoints as $opt)
             <option value="{{ $opt->id }}">{{ $opt->name }}</option>
           @endforeach
         </select>
@@ -222,7 +222,7 @@ document.addEventListener('DOMContentLoaded', function(){
   let rowIndex = smtpTbody.querySelectorAll('tr').length;
 
   const addRow = () => {
-    const html = smtpTpl.replaceAll('__NAME__', `smtp_rows[${rowIndex}]`);
+    const html = smtpTpl.replaceAll('__NAME__', `apiEndpoint_rows[${rowIndex}]`);
     smtpTbody.insertAdjacentHTML('beforeend', html);
     rowIndex++;
   };

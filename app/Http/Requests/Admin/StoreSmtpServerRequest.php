@@ -4,7 +4,7 @@ namespace App\Http\Requests\Admin;
 
 use Illuminate\Foundation\Http\FormRequest;
 
-class StoreSmtpServerRequest extends FormRequest
+class StoreApiEndpointRequest extends FormRequest
 {
     /**
      * Détermine si l'utilisateur est autorisé à faire cette requête.
@@ -26,7 +26,7 @@ class StoreSmtpServerRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name' => 'required|string|max:255|unique:smtp_servers,name', // Nom obligatoire, unique
+            'name' => 'required|string|max:255|unique:api_endpoints,name', // Nom obligatoire, unique
             'url' => 'required|string|max:255', // Hôte obligatoire
             'api_key' => 'nullable|string', // Rendre la clé optionnelle
             'is_active' => 'boolean', // Doit être un booléen

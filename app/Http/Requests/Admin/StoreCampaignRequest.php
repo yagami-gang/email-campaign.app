@@ -53,10 +53,10 @@ class StoreCampaignRequest extends FormRequest
             'scheduled_at.after_or_equal' => 'La date et l\'heure de planification doivent être dans le futur ou maintenant.',
             'template_id.required' => 'Le template est obligatoire.',
             'template_id.exists' => 'Le template sélectionné est invalide.',
-            'smtp_server_ids.required' => 'Au moins un serveur SMTP doit être sélectionné.',
-            'smtp_server_ids.array' => 'Les serveurs SMTP doivent être fournis sous forme de liste.',
-            'smtp_server_ids.min' => 'Vous devez sélectionner au moins un serveur SMTP.',
-            'smtp_server_ids.*.exists' => 'Un des serveurs SMTP sélectionnés est invalide.',
+            'api_endpoint_ids.required' => 'Au moins un serveur SMTP doit être sélectionné.',
+            'api_endpoint_ids.array' => 'Les serveurs SMTP doivent être fournis sous forme de liste.',
+            'api_endpoint_ids.min' => 'Vous devez sélectionner au moins un serveur SMTP.',
+            'api_endpoint_ids.*.exists' => 'Un des serveurs SMTP sélectionnés est invalide.',
         ];
     }
 }

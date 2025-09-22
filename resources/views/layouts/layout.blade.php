@@ -237,7 +237,7 @@
 
 <style>
     /* Styles spécifiques à cette page */
-    .table-responsive-wrapper { overflow-x: auto; }
+    .table-responsive-wrapper {  }
     .table-actions, .table-actions-header { text-align: center !important; width: 50px; }
 
     /* Badges de statut */

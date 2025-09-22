@@ -5,7 +5,7 @@
 @section('content')
     <div class="toolbar">
         <h2>Serveurs SMTP</h2>
-        <a class="btn" href="{{ route('admin.smtp_servers.create') }}"><i class="fa-solid fa-plus"></i> Ajouter un serveur</a>
+        <a class="btn" href="{{ route('admin.api_endpoints.create') }}"><i class="fa-solid fa-plus"></i> Ajouter un serveur</a>
     </div>
 
     <div class="card" style="padding:0;">
@@ -21,7 +21,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach($smtpServers as $s)
+                    @foreach($apiEndpoints as $s)
                         <tr>
                             <td>#{{ $s->id }}</td>
                             <td>{{ $s->name }}</td>
@@ -35,7 +35,7 @@
                             </td>
                             <td class="table-actions">
                                 {{-- Le formulaire de suppression est caché et sera soumis via JS --}}
-                                <form id="delete-form-{{ $s->id }}" method="POST" action="{{ route('admin.smtp_servers.destroy', $s->id) }}" style="display:none;">
+                                <form id="delete-form-{{ $s->id }}" method="POST" action="{{ route('admin.api_endpoints.destroy', $s->id) }}" style="display:none;">
                                     @csrf
                                     @method('DELETE')
                                 </form>
@@ -45,10 +45,10 @@
                                         <i class="fa-solid fa-ellipsis-h"></i>
                                     </button>
                                     <div class="dropdown-menu">
-                                        <a class="dropdown-item" href="{{ route('admin.smtp_servers.show', $s->id) }}">
+                                        <a class="dropdown-item" href="{{ route('admin.api_endpoints.show', $s->id) }}">
                                             <i class="fa-solid fa-eye"></i> Voir
                                         </a>
-                                        <a class="dropdown-item" href="{{ route('admin.smtp_servers.edit', $s->id) }}">
+                                        <a class="dropdown-item" href="{{ route('admin.api_endpoints.edit', $s->id) }}">
                                             <i class="fa-solid fa-pencil"></i> Modifier
                                         </a>
                                         <div class="dropdown-divider"></div>

@@ -12,7 +12,7 @@ use App\Http\Controllers\Admin\CampaignController;
 use App\Http\Controllers\Admin\TemplateController;
 use App\Http\Controllers\Admin\BlacklistController;
 use App\Http\Controllers\Admin\StatisticController;
-use App\Http\Controllers\Admin\SmtpServerController;
+use App\Http\Controllers\Admin\ApiEndpointController;
 
 Route::get('/', function () {
     return redirect()->route('admin.campaigns.index');
@@ -42,7 +42,7 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     Route::resource('templates', TemplateController::class);
 
     // Routes de ressources pour les serveurs SMTP (CRUD)
-    Route::resource('smtp_servers', SmtpServerController::class);
+    Route::resource('api_endpoints', ApiEndpointController::class);
 
     // Routes de ressources pour les campagnes (CRUD)
     Route::resource('campaigns', CampaignController::class);

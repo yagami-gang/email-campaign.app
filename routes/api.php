@@ -296,7 +296,7 @@ Route::get('/api/cron/send-campaign-emails', function (Request $request) {
     $BATCH_API_SIZE  = 10;  // taille d’un paquet envoyé à l’API distante
 
     // Récupère toutes les campagnes prêtes
-    $campaigns = Campaign::with(['smtpServers', 'template'])
+    $campaigns = Campaign::with(['apiEndpoints', 'template'])
         ->where('status', 'imported')
         ->orWhere('status', 'active')
         ->get();
@@ -308,7 +308,7 @@ Route::get('/api/cron/send-campaign-emails', function (Request $request) {
     ];
 
     foreach ($campaigns as $campaign) {
-        if ($campaign->smtpServers->isEmpty()) {
+        if ($campaign->apiEndpoints->isEmpty()) {
             Log::warning("Campagne #{$campaign->id} sans serveurs SMTP. Passage.");
             $campaign->update([
                 'status'        => 'failed',
@@ -355,8 +355,8 @@ Route::get('/api/cron/send-campaign-emails', function (Request $request) {
 
         $today = Carbon::today();
 
-        foreach ($campaign->smtpServers as $smtp) {
-            $p = $smtp->pivot; // sender_email, sender_name, scheduled_at, max_daily_sends, ...
+        foreach ($campaign->apiEndpoints as $apiEndpoint) {
+            $p = $apiEndpoint->pivot; // sender_email, sender_name, scheduled_at, max_daily_sends, ...
 
             // Respect de la date de départ (scheduled_at)
             if (!empty($p->scheduled_at)) {
@@ -364,7 +364,7 @@ Route::get('/api/cron/send-campaign-emails', function (Request $request) {
                 if ($scheduledAt->isFuture()) {
                     $report['details'][] = [
                         'campaign_id' => $campaign->id,
-                        'smtp_id'     => $smtp->id,
+                        'smtp_id'     => $apiEndpoint->id,
                         'status'      => 'scheduled_later',
                         'scheduled_at'=> $scheduledAt->toDateTimeString(),
                     ];
@@ -375,7 +375,7 @@ Route::get('/api/cron/send-campaign-emails', function (Request $request) {
             if ( in_array($p->status, ['failed', 'paused', 'canceled']) ) {
                 $report['details'][] = [
                     'campaign_id' => $campaign->id,
-                    'smtp_id'     => $smtp->id,
+                    'smtp_id'     => $apiEndpoint->id,
                     'status'      => ($p->status=='failed' ? 'failed : '.$p->error_message : $p->status),
                 ];
                 continue;
@@ -384,7 +384,7 @@ Route::get('/api/cron/send-campaign-emails', function (Request $request) {
             // Quota journalier pour ce SMTP
             $dailySent = DB::table($contactsTable)
                 ->whereDate('sent_at', $today)
-                ->where('id_smtp_server', $smtp->id)
+                ->where('api_endpoint_id', $apiEndpoint->id)
                 ->where('status', 'sended')
                 ->count();
 
@@ -395,7 +395,7 @@ Route::get('/api/cron/send-campaign-emails', function (Request $request) {
             if ($dailyRemain <= 0) {
                 $report['details'][] = [
                     'campaign_id' => $campaign->id,
-                    'smtp_id'     => $smtp->id,
+                    'smtp_id'     => $apiEndpoint->id,
                     'status'      => 'daily_quota_reached',
                 ];
                 continue;
@@ -407,7 +407,7 @@ Route::get('/api/cron/send-campaign-emails', function (Request $request) {
             if ($toSend <= 0) {
                 $report['details'][] = [
                     'campaign_id' => $campaign->id,
-                    'smtp_id'     => $smtp->id,
+                    'smtp_id'     => $apiEndpoint->id,
                     'status'      => 'nothing_to_send',
                 ];
                 continue;
@@ -431,7 +431,7 @@ Route::get('/api/cron/send-campaign-emails', function (Request $request) {
 
                 $report['details'][] = [
                     'campaign_id' => $campaign->id,
-                    'smtp_id'     => $smtp->id,
+                    'smtp_id'     => $apiEndpoint->id,
                     'status'      => 'no_remaining_contacts',
                 ];
 
@@ -508,7 +508,7 @@ Route::get('/api/cron/send-campaign-emails', function (Request $request) {
                         'subject'  => $campaign->subject,
                         'content'  => $html,
                         // Si l’API distante accepte un identifiant, tu peux ajouter:
-                        // 'reference' => ['campaign_id' => $campaign->id, 'smtp_id' => $smtp->id, 'email' => $contact->email],
+                        // 'reference' => ['campaign_id' => $campaign->id, 'smtp_id' => $apiEndpoint->id, 'email' => $contact->email],
                     ];
                 }
 
@@ -526,22 +526,22 @@ Route::get('/api/cron/send-campaign-emails', function (Request $request) {
                 $respJson = null;
 
                 try {
-                    if (empty($smtp->url)) {
-                        throw new \RuntimeException("SMTP server #{$smtp->id} n'a pas d'URL API configurée.");
+                    if (empty($apiEndpoint->url)) {
+                        throw new \RuntimeException("SMTP server #{$apiEndpoint->id} n'a pas d'URL API configurée.");
                     }
 
                     $headers = ['Content-Type' => 'application/json', 'Accept' => 'application/json'];
-                    if (!empty($smtp->api_key)) {
-                        $headers['Authorization'] = 'Bearer ' . $smtp->api_key;
+                    if (!empty($apiEndpoint->api_key)) {
+                        $headers['Authorization'] = 'Bearer ' . $apiEndpoint->api_key;
                     }
 
-                    $resp     = Http::withHeaders($headers)->timeout(60)->post($smtp->url, $payload);
+                    $resp     = Http::withHeaders($headers)->timeout(60)->post($apiEndpoint->url, $payload);
                     $http     = $resp->status();
                     $respJson = $resp->json(); // peut être null si pas du JSON
                     $ok       = $resp->successful(); // true pour 2xx
 
                 } catch (\Throwable $e) {
-                    Log::error("Erreur HTTP (campagne {$campaign->id}, smtp {$smtp->id}) : ".$e->getMessage());
+                    Log::error("Erreur HTTP (campagne {$campaign->id}, smtp {$apiEndpoint->id}) : ".$e->getMessage());
                     $ok = false;
                     $http = 0;
                     $respJson = null;
@@ -576,7 +576,7 @@ Route::get('/api/cron/send-campaign-emails', function (Request $request) {
                                     'status'          => 'sended',
                                     'sent_at'         => now(),
                                     'delivered_at'    => now(),
-                                    'id_smtp_server'  => $smtp->id,
+                                    'api_endpoint_id'  => $apiEndpoint->id,
                                 ]);
                             $sentForChunk++;
                             $sentOk++;
@@ -586,7 +586,7 @@ Route::get('/api/cron/send-campaign-emails', function (Request $request) {
                                 ->update([
                                     'status'          => 'fail_smtp',
                                     'error_message'   => Str::limit((string)$err, 250),
-                                    'id_smtp_server'  => $smtp->id,
+                                    'api_endpoint_id'  => $apiEndpoint->id,
                                 ]);
                             $sentFail++;
                         }
@@ -602,7 +602,7 @@ Route::get('/api/cron/send-campaign-emails', function (Request $request) {
                             ->update([
                                 'status'          => 'fail_http',
                                 'error_message'   => 'Missing in API results',
-                                'id_smtp_server'  => $smtp->id,
+                                'api_endpoint_id'  => $apiEndpoint->id,
                             ]);
                         $sentFail += count($missing);
                     }
@@ -629,42 +629,42 @@ Route::get('/api/cron/send-campaign-emails', function (Request $request) {
 
                     if (in_array($http, [400, 401, 403], true)) {
                         $errMsg = is_array($respJson) ? ($respJson['error'] ?? $resp->body()) : ($resp ? $resp->body() : "Appel API échoué (HTTP {$http})");
-                        $errMsg = "Code HTTP: {$http} - ".$errMsg;  
+                        $errMsg = "Code HTTP: {$http} - ".$errMsg;
                     }
 
-                    
+
                     DB::table($contactsTable)
                         ->whereIn('email', $emailsInChunk)
                         ->update([
                             'sent_at'         => now(),
                             'status'          => 'fail_http',
                             'error_message'   => Str::limit($errMsg, 250),
-                            'id_smtp_server'  => $smtp->id,
+                            'api_endpoint_id'  => $apiEndpoint->id,
                         ]);
 
-                    
+
                     DB::table('campaign_smtp_server')
                         ->where('campaign_id', $campaign->id)
-                        ->where('smtp_server_id', $smtp->id)
+                        ->where('api_endpoint_id', $apiEndpoint->id)
                         ->update([
                             'status'        => 'failed',
                             'error_message' => Str::limit($errMsg, 250),
                             'updated_at'    => now(),
                         ]);
-                    
-                    
+
+
 
                     $sentFail += count($emailsInChunk);
 
                     if ($resp && !$ok) {
-                        Log::warning("Envoi batch échoué (HTTP {$http}) - campaign({$campaign->id}) - smtp({$smtp->id}) " . $bodySnippet);
+                        Log::warning("Envoi batch échoué (HTTP {$http}) - campaign({$campaign->id}) - smtp({$apiEndpoint->id}) " . $bodySnippet);
                     }
                 }
             }
 
             $report['details'][] = [
                 'campaign_id' => $campaign->id,
-                'smtp_id'     => $smtp->id,
+                'smtp_id'     => $apiEndpoint->id,
                 'attempted'   => $contacts->count(),
                 'sent_ok'     => $sentOk,
                 'sent_fail'   => $sentFail,

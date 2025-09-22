@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Campaign;
 use App\Models\Template;
-use App\Models\SmtpServer;
+use App\Models\ApiEndpoint;
 use App\Models\Json_file;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -29,7 +29,7 @@ class CampaignController extends Controller
      */
     public function index()
     {
-        $campaigns = Campaign::with(['template', 'smtpServers'])->get();
+        $campaigns = Campaign::with(['template', 'apiEndpoints'])->get();
         return view('pages.campaigns.index', compact('campaigns'));
     }
 
@@ -39,9 +39,9 @@ class CampaignController extends Controller
     public function create()
     {
         $templates = Template::where('is_active', true)->get();
-        $smtpServers = SmtpServer::where('is_active', true)->get();
+        $apiEndpoints = ApiEndpoint::where('is_active', true)->get();
 
-        return view('pages.campaigns.create', compact('templates', 'smtpServers'));
+        return view('pages.campaigns.create', compact('templates', 'apiEndpoints'));
     }
 
     /**
@@ -149,20 +149,20 @@ class CampaignController extends Controller
         //----- 6. statistique pour les serveurs -------//
          // Requête unique pour obtenir les stats de tous les serveurs en une seule fois
          $statsQuery = DB::table($contactTableName)
-         ->select('id_smtp_server',
+         ->select('api_endpoint_id',
              DB::raw("COUNT(*) as sent_count"), // Total des contacts assignés à ce serveur
              DB::raw("COUNT(CASE WHEN status = 'sended' THEN 1 END) as delivered_count") // Total des délivrés
          )
-         ->whereNotNull('id_smtp_server')
-         ->groupBy('id_smtp_server')
+         ->whereNotNull('api_endpoint_id')
+         ->groupBy('api_endpoint_id')
          ->get()
-         ->keyBy('id_smtp_server'); // La clé est l'ID du serveur pour un accès facile
+         ->keyBy('api_endpoint_id'); // La clé est l'ID du serveur pour un accès facile
 
      // On charge les serveurs SMTP de la campagne avec les infos de la table pivot
-        $smtpServers = $campaign->smtpServers()->withPivot('sender_name', 'sender_email','status','error_message')->get();
+        $apiEndpoints = $campaign->apiEndpoints()->withPivot('sender_name', 'sender_email','status','error_message')->get();
 
         // On fusionne les informations de base avec les statistiques calculées
-        $serverStats = $smtpServers->map(function ($server) use ($statsQuery) {
+        $serverStats = $apiEndpoints->map(function ($server) use ($statsQuery) {
             $stats = $statsQuery->get($server->id);
 
             return (object) [
@@ -208,14 +208,14 @@ class CampaignController extends Controller
         return view('pages.campaigns.contacts', compact('campaign', 'contacts'));
     }
 
-    
+
     /**
      * Affiche le formulaire pour éditer une campagne existante et liste les fichiers JSON disponibles.
      */
     public function edit(Campaign $campaign)
     {
         $templates = Template::where('is_active', true)->get();
-        $smtpServers = SmtpServer::where('is_active', true)->get();
+        $apiEndpoints = ApiEndpoint::where('is_active', true)->get();
 
         // Récupère la liste des fichiers JSON dans le dossier d'importation
         $jsonFiles = Storage::disk('local')->files('private');
@@ -227,7 +227,7 @@ class CampaignController extends Controller
 
         //dd($files);
 
-        return view('pages.campaigns.edit', compact('campaign', 'templates', 'smtpServers', 'jsonFiles'));
+        return view('pages.campaigns.edit', compact('campaign', 'templates', 'apiEndpoints', 'jsonFiles'));
     }
 
     /**
@@ -256,13 +256,13 @@ class CampaignController extends Controller
             'shoot_limit' => 'required',
 
             // Section 2: Canaux d'envoi (API)
-            'smtp_rows' => 'required|array|min:1',
-            'smtp_rows.*.sender_name' => 'required|string|max:255',
-            'smtp_rows.*.sender_email' => 'required|email|max:255',
-            'smtp_rows.*.smtp_server_id' => 'required',
-            'smtp_rows.*.send_frequency_minutes' => 'nullable|integer|min:1',
-            'smtp_rows.*.max_daily_sends' => 'nullable|integer|min:1',
-            'smtp_rows.*.scheduled_at' => 'nullable|date_format:Y-m-d\TH:i',
+            'apiEndpoint_rows' => 'required|array|min:1',
+            'apiEndpoint_rows.*.sender_name' => 'required|string|max:255',
+            'apiEndpoint_rows.*.sender_email' => 'required|email|max:255',
+            'apiEndpoint_rows.*.api_endpoint_id' => 'required',
+            'apiEndpoint_rows.*.send_frequency_minutes' => 'nullable|integer|min:1',
+            'apiEndpoint_rows.*.max_daily_sends' => 'nullable|integer|min:1',
+            'apiEndpoint_rows.*.scheduled_at' => 'nullable|date_format:Y-m-d\TH:i',
 
             // Section 3: Fichiers de contacts
             'json_file_path' => 'required|array|min:1',
@@ -292,13 +292,13 @@ class CampaignController extends Controller
             }
 
             // 2. Préparer les données pour la synchronisation de la table pivot
-            $smtpSyncData = [];
-            foreach ($validated['smtp_rows'] as $row) {
+            $apiEndpointSyncData = [];
+            foreach ($validated['apiEndpoint_rows'] as $row) {
                 // S'assurer qu'un serveur n'est pas ajouté plusieurs fois
-                if (isset($smtpSyncData[$row['smtp_server_id']])) {
+                if (isset($apiEndpointSyncData[$row['api_endpoint_id']])) {
                     continue;
                 }
-                $smtpSyncData[$row['smtp_server_id']] = [
+                $apiEndpointSyncData[$row['api_endpoint_id']] = [
                     'sender_name' => $row['sender_name'],
                     'sender_email' => $row['sender_email'],
                     'send_frequency_minutes' => $row['send_frequency_minutes'],
@@ -306,7 +306,7 @@ class CampaignController extends Controller
                     'scheduled_at' => $row['scheduled_at'],
                 ];
             }
-            $campaign->smtpServers()->sync($smtpSyncData);
+            $campaign->apiEndpoints()->sync($apiEndpointSyncData);
 
             // 3. Gestion de la table de contacts
 
@@ -341,7 +341,7 @@ class CampaignController extends Controller
                     $table->timestamp('delivered_at')->nullable();
                     $table->timestamp('opened_at')->nullable();
                     $table->timestamp('clicked_at')->nullable();
-                    $table->integer('id_smtp_server')->nullable();
+                    $table->integer('api_endpoint_id')->nullable();
                     $table->string('error_message')->nullable();
 
                 });
@@ -413,10 +413,10 @@ class CampaignController extends Controller
     public function launch(Campaign $campaign, Request $request)
     {
         if ($campaign->status === 'pending' || $campaign->status === 'paused') {
-            $hasSmtpServers = $campaign->smtpServers->isNotEmpty();
+            $hasApiEndpoints = $campaign->apiEndpoints->isNotEmpty();
             $hasContacts = $campaign->nom_table_contact && Schema::hasTable($campaign->nom_table_contact) && DB::table($campaign->nom_table_contact)->count() > 0;
 
-            if (!$hasSmtpServers || !$hasContacts) {
+            if (!$hasApiEndpoints || !$hasContacts) {
                 $errorMessage = 'Impossible de lancer la campagne : elle doit avoir au moins un serveur API et des contacts associés.';
                 if ($request->expectsJson()) {
                     return Response::json(['error' => $errorMessage], 400);
@@ -477,10 +477,10 @@ class CampaignController extends Controller
     public function resume(Campaign $campaign, Request $request)
     {
         if ($campaign->status === 'paused') {
-            $hasSmtpServers = $campaign->smtpServers->isNotEmpty();
+            $hasApiEndpoints = $campaign->apiEndpoints->isNotEmpty();
             $hasContacts = $campaign->nom_table_contact && Schema::hasTable($campaign->nom_table_contact) && DB::table($campaign->nom_table_contact)->count() > 0;
 
-            if (!$hasSmtpServers || !$hasContacts) {
+            if (!$hasApiEndpoints || !$hasContacts) {
                 $errorMessage = 'Impossible de reprendre la campagne : elle doit avoir au moins un serveur API et des contacts associés.';
                 if ($request->expectsJson()) {
                     return Response::json(['error' => $errorMessage], 400);

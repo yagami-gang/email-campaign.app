@@ -49,9 +49,9 @@ class Campaign extends Model
      *
      * @return \Illuminate\Database\Eloquent\Relations\BelongsToMany
      */
-    public function smtpServers(): BelongsToMany
+    public function apiEndpoints(): BelongsToMany
     {
-        return $this->belongsToMany(SmtpServer::class, 'campaign_smtp_server')
+        return $this->belongsToMany(ApiEndpoint::class, 'campaign_api_endpoint')
             ->withPivot([
                 'sender_name', 'sender_email',
                 'send_frequency_minutes', 'max_daily_sends',
@@ -82,14 +82,4 @@ class Campaign extends Model
         return $this->hasMany(ShortUrl::class);
     }
 
-    /**
-     * Définit la relation entre une campagne et les contacts qui y sont associés.
-     * C'est une relation Many-to-Many via la table pivot 'campaign_contact'.
-     *
-     * @return \Illuminate\Database\Eloquent\Relations\BelongsToMany
-     */
-    public function contacts(): BelongsToMany
-    {
-        return $this->belongsToMany(Contact::class, 'campaign_contact');
-    }
 }

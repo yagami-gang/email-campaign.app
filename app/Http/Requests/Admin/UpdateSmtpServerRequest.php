@@ -5,7 +5,7 @@ namespace App\Http\Requests\Admin;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule; // Importe Rule pour la validation unique ignorée
 
-class UpdateSmtpServerRequest extends FormRequest
+class UpdateApiEndpointRequest extends FormRequest
 {
     /**
      * Détermine si l'utilisateur est autorisé à faire cette requête.
@@ -15,7 +15,7 @@ class UpdateSmtpServerRequest extends FormRequest
     public function authorize(): bool
     {
         // Seuls les administrateurs authentifiés devraient pouvoir modifier des serveurs SMTP
-        // Implémentez ici la logique d'autorisation (ex: $this->user()->can('update-smtp-server', $this->smtpServer))
+        // Implémentez ici la logique d'autorisation (ex: $this->user()->can('update-smtp-server', $this->apiendpoint))
         return true; // Pour l'instant, on autorise, mais à sécuriser plus tard
     }
 
@@ -27,11 +27,11 @@ class UpdateSmtpServerRequest extends FormRequest
     public function rules(): array
     {
         // Récupère l'ID du serveur SMTP depuis les paramètres de la route pour ignorer son propre nom lors de la vérification d'unicité
-        $smtpServerId = $this->route('smtp_server')->id; // 'smtp_server' est le nom du paramètre de route par défaut pour les ressources
+        $apiendpointId = $this->route('api_endpoint')->id; // 'api_endpoint' est le nom du paramètre de route par défaut pour les ressources
 
         return [
             // Le nom doit être unique SAUF pour le serveur que nous sommes en train de modifier
-            'name' => ['required', 'string', 'max:255', Rule::unique('smtp_servers')->ignore($smtpServerId)],
+            'name' => ['required', 'string', 'max:255', Rule::unique('api_endpoints')->ignore($apiendpointId)],
             'url' => 'required|string|max:255',
             'api_key' => 'nullable|string', // Rendre la clé optionnelle
             'is_active' => 'boolean',

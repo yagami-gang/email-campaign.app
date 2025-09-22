@@ -34,10 +34,10 @@ class UpdateCampaignRequest extends FormRequest
             'send_frequency_minutes' => 'nullable|integer|min:0',
             'max_daily_sends' => 'nullable|integer|min:0',
             // La date planifiée peut être dans le passé si la campagne est déjà en cours ou passée
-            'scheduled_at' => 'required|date', 
+            'scheduled_at' => 'required|date',
             'template_id' => 'required|exists:templates,id',
-            'smtp_server_ids' => 'required|array|min:1',
-            'smtp_server_ids.*' => 'exists:smtp_servers,id',
+            'api_endpoint_ids' => 'required|array|min:1',
+            'api_endpoint_ids.*' => 'exists:api_endpoints,id',
             // 'mailing_list_id' => 'required|exists:mailing_lists,id',
         ];
     }
@@ -59,10 +59,10 @@ class UpdateCampaignRequest extends FormRequest
             'scheduled_at.date' => 'La date et l\'heure de planification doivent être une date valide.',
             'template_id.required' => 'Le template est obligatoire.',
             'template_id.exists' => 'Le template sélectionné est invalide.',
-            'smtp_server_ids.required' => 'Au moins un serveur SMTP doit être sélectionné.',
-            'smtp_server_ids.array' => 'Les serveurs SMTP doivent être fournis sous forme de liste.',
-            'smtp_server_ids.min' => 'Vous devez sélectionner au moins un serveur SMTP.',
-            'smtp_server_ids.*.exists' => 'Un des serveurs SMTP sélectionnés est invalide.',
+            'api_endpoint_ids.required' => 'Au moins un serveur SMTP doit être sélectionné.',
+            'api_endpoint_ids.array' => 'Les serveurs SMTP doivent être fournis sous forme de liste.',
+            'api_endpoint_ids.min' => 'Vous devez sélectionner au moins un serveur SMTP.',
+            'api_endpoint_ids.*.exists' => 'Un des serveurs SMTP sélectionnés est invalide.',
             // 'mailing_list_id.required' => 'La mailing list est obligatoire.',
             // 'mailing_list_id.exists' => 'La mailing list sélectionnée est invalide.',
         ];

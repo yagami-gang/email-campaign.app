@@ -1,6 +1,6 @@
 @php
   $isCamp = request()->routeIs('admin.campaigns.*');
-  $isSmtp = request()->routeIs('admin.smtp_servers.*');
+  $isSmtp = request()->routeIs('admin.api_endpoints.*');
   $isTpl  = request()->routeIs('admin.templates.*');
   $isBlk  = request()->routeIs('admin.blacklist.*');
 @endphp
@@ -33,10 +33,10 @@
       Serveurs SMTP
     </summary>
     <div class="submenu">
-      <a href="{{ route('admin.smtp_servers.index') }}" class="{{ request()->routeIs('admin.smtp_servers.index') ? 'active' : '' }}">
+      <a href="{{ route('admin.api_endpoints.index') }}" class="{{ request()->routeIs('admin.api_endpoints.index') ? 'active' : '' }}">
         <i class="fa-solid fa-rectangle-list"></i> Liste
       </a>
-      <a href="{{ route('admin.smtp_servers.create') }}" class="{{ request()->routeIs('admin.smtp_servers.create') ? 'active' : '' }}">
+      <a href="{{ route('admin.api_endpoints.create') }}" class="{{ request()->routeIs('admin.api_endpoints.create') ? 'active' : '' }}">
         <i class="fa-solid fa-plus"></i> Ajouter
       </a>
     </div>
