@@ -41,8 +41,8 @@ class StoreApiEndpointRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'name.required' => 'Le nom du serveur SMTP est obligatoire.',
-            'name.unique' => 'Un serveur SMTP avec ce nom existe déjà.',
+            'name.required' => 'Le nom du Serveurs API est obligatoire.',
+            'name.unique' => 'Un Serveurs API avec ce nom existe déjà.',
             'url.required' => 'L\'hôte SMTP est obligatoire.',
             'is_active.boolean' => 'Le statut "actif" doit être vrai ou faux.',
         ];

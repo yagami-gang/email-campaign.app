@@ -12,7 +12,7 @@ class ApiEndpoint extends Model
 
     /**
      * Les attributs qui peuvent être assignés en masse.
-     * Cela permet de créer ou mettre à jour un serveur SMTP avec un tableau de données.
+     * Cela permet de créer ou mettre à jour un Serveurs API avec un tableau de données.
      *
      * @var array<int, string>
      */

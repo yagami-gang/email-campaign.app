@@ -26,7 +26,7 @@ class UpdateApiEndpointRequest extends FormRequest
      */
     public function rules(): array
     {
-        // Récupère l'ID du serveur SMTP depuis les paramètres de la route pour ignorer son propre nom lors de la vérification d'unicité
+        // Récupère l'ID du Serveurs API depuis les paramètres de la route pour ignorer son propre nom lors de la vérification d'unicité
         $apiendpointId = $this->route('api_endpoint')->id; // 'api_endpoint' est le nom du paramètre de route par défaut pour les ressources
 
         return [
@@ -46,8 +46,8 @@ class UpdateApiEndpointRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'name.required' => 'Le nom du serveur SMTP est obligatoire.',
-            'name.unique' => 'Un autre serveur SMTP avec ce nom existe déjà.',
+            'name.required' => 'Le nom du Serveurs API est obligatoire.',
+            'name.unique' => 'Un autre Serveurs API avec ce nom existe déjà.',
             'api_key' => 'nullable|string', // Rendre la clé optionnelle
             'is_active.boolean' => 'Le statut "actif" doit être vrai ou faux.',
         ];

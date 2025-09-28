@@ -30,7 +30,7 @@
   <details {{ $isSmtp ? 'open' : '' }} class="dropdown">
     <summary>
       <i class="fa-solid fa-server" style="width:18px;text-align:center"></i>
-      API endpoint
+      endpoints API
     </summary>
     <div class="submenu">
       <a href="{{ route('admin.api_endpoints.index') }}" class="{{ request()->routeIs('admin.api_endpoints.index') ? 'active' : '' }}">

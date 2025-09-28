@@ -20,7 +20,7 @@ class ApiEndpointController extends Controller
     }
 
     /**
-     * Affiche le formulaire pour créer un nouveau serveur SMTP.
+     * Affiche le formulaire pour créer un nouveau Serveurs API.
      */
     public function create()
     {
@@ -28,7 +28,7 @@ class ApiEndpointController extends Controller
     }
 
     /**
-     * Stocke un nouveau serveur SMTP dans la base de données.
+     * Stocke un nouveau Serveurs API dans la base de données.
      * Utilise StoreApiEndpointRequest pour la validation des données.
      */
     public function store(StoreApiEndpointRequest $request)
@@ -39,11 +39,11 @@ class ApiEndpointController extends Controller
 
         ApiEndpoint::create($validatedData);
 
-        return redirect()->route('admin.api_endpoints.index')->with('success', 'Le serveur SMTP a été créé avec succès !');
+        return redirect()->route('admin.api_endpoints.index')->with('success', 'Le Serveurs API a été créé avec succès !');
     }
 
     /**
-     * Affiche les détails d'un serveur SMTP spécifique.
+     * Affiche les détails d'un Serveurs API spécifique.
      */
     public function show(ApiEndpoint $apiEndpoint)
     {
@@ -51,7 +51,7 @@ class ApiEndpointController extends Controller
     }
 
     /**
-     * Affiche le formulaire pour éditer un serveur SMTP existant.
+     * Affiche le formulaire pour éditer un Serveurs API existant.
      */
     public function edit(ApiEndpoint $apiEndpoint)
     {
@@ -59,7 +59,7 @@ class ApiEndpointController extends Controller
     }
 
     /**
-     * Met à jour un serveur SMTP existant dans la base de données.
+     * Met à jour un Serveurs API existant dans la base de données.
      * Utilise UpdateApiEndpointRequest pour la validation des données.
      */
     public function update(UpdateApiEndpointRequest $request, ApiEndpoint $apiEndpoint)
@@ -74,16 +74,16 @@ class ApiEndpointController extends Controller
         }
         $apiEndpoint->update($validatedData);
 
-        return redirect()->route('admin.api_endpoints.index')->with('success', 'Le serveur SMTP a été mis à jour avec succès !');
+        return redirect()->route('admin.api_endpoints.index')->with('success', 'Le Serveurs API a été mis à jour avec succès !');
     }
 
     /**
-     * Supprime un serveur SMTP de la base de données.
+     * Supprime un Serveurs API de la base de données.
      */
     public function destroy(ApiEndpoint $apiEndpoint)
     {
         $apiEndpoint->delete();
 
-        return redirect()->route('admin.api_endpoints.index')->with('success', 'Le serveur SMTP a été supprimé avec succès !');
+        return redirect()->route('admin.api_endpoints.index')->with('success', 'Le Serveurs API a été supprimé avec succès !');
     }
 }
