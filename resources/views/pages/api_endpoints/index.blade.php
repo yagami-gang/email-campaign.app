@@ -4,8 +4,8 @@
 
 @section('content')
     <div class="toolbar">
-        <h2>Serveurs SMTP</h2>
-        <a class="btn" href="{{ route('admin.api_endpoints.create') }}"><i class="fa-solid fa-plus"></i> Ajouter un serveur</a>
+        <h2>Endpoints API</h2>
+        <a class="btn" href="{{ route('admin.api_endpoints.create') }}"><i class="fa-solid fa-plus"></i> Ajouter un endpoint</a>
     </div>
 
     <div class="card" style="padding:0;">

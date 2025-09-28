@@ -45,7 +45,7 @@ class Campaign extends Model
     /**
      * Définit la relation entre une campagne et les serveurs SMTP qu'elle utilise pour l'envoi.
      * Une campagne peut utiliser plusieurs serveurs SMTP.
-     * 'campaign_smtp_server' est le nom de la table pivot qui fera le lien.
+     * 'campaign_api_endpoint' est le nom de la table pivot qui fera le lien.
      *
      * @return \Illuminate\Database\Eloquent\Relations\BelongsToMany
      */

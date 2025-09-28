@@ -643,7 +643,7 @@ Route::get('/api/cron/send-campaign-emails', function (Request $request) {
                         ]);
 
 
-                    DB::table('campaign_smtp_server')
+                    DB::table('campaign_api_endpoint')
                         ->where('campaign_id', $campaign->id)
                         ->where('api_endpoint_id', $apiEndpoint->id)
                         ->update([
