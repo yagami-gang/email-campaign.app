@@ -27,7 +27,7 @@ return new class extends Migration
 
             // Clé étrangère vers la table 'templates'. Si le template est supprimé, la campagne est aussi supprimée.
             $table->foreignId('template_id')->constrained()->onDelete('cascade');
-            // Clé étrangère vers la table 'smtp_servers'. Si le serveur SMTP est supprimé, la campagne est aussi supprimée.
+            // Clé étrangère vers la table 'smtp_servers'. Si le Serveurs API est supprimé, la campagne est aussi supprimée.
             $table->foreignId('smtp_server_id')->constrained()->onDelete('cascade');
             
             $table->timestamps(); // Ajoute automatiquement les colonnes 'created_at' et 'updated_at'.

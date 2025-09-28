@@ -78,13 +78,13 @@
   <div class="card" style="padding:0; margin-top: 24px;">
     <header class="card-header" style="margin: 22px; padding: 0 0 16px 0;">
         <h3>Performance par Canal d'Envoi</h3>
-        <p class="hint">Statistiques détaillées pour chaque serveur SMTP utilisé dans cette campagne.</p>
+        <p class="hint">Statistiques détaillées pour chaque Serveurs API utilisé dans cette campagne.</p>
     </header>
     <div class="table-responsive-wrapper">
         <table class="sub-table">
             <thead>
                 <tr>
-                    <th>Serveur SMTP</th>
+                    <th>Serveur API</th>
                     <th>Expéditeur</th>
                     <th style="text-align: right;">Envoyés</th>
                     <th style="text-align: right;">Délivrés</th>

@@ -292,7 +292,7 @@ Route::get('/api/cron/send-campaign-emails', function (Request $request) {
     @set_time_limit(0);
 
     // Limites
-    $PER_RUN_LIMIT   = 50; // nb max de contacts traités par serveur SMTP et par campagne à CHAQUE passage
+    $PER_RUN_LIMIT   = 50; // nb max de contacts traités par Serveurs API et par campagne à CHAQUE passage
     $BATCH_API_SIZE  = 10;  // taille d’un paquet envoyé à l’API distante
 
     // Récupère toutes les campagnes prêtes
@@ -312,7 +312,7 @@ Route::get('/api/cron/send-campaign-emails', function (Request $request) {
             Log::warning("Campagne #{$campaign->id} sans serveurs SMTP. Passage.");
             $campaign->update([
                 'status'        => 'failed',
-                'error_message' => "Serveur SMTP absent"
+                'error_message' => "Serveur API absent"
             ]);
             continue;
         }

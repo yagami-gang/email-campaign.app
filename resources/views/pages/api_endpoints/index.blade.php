@@ -4,7 +4,7 @@
 
 @section('content')
     <div class="toolbar">
-        <h2>Serveurs SMTP</h2>
+        <h2>Serveurs API</h2>
         <a class="btn" href="{{ route('admin.api_endpoints.create') }}"><i class="fa-solid fa-plus"></i> Ajouter un serveur</a>
     </div>
 

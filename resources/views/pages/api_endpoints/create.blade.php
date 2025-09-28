@@ -2,7 +2,7 @@
 
 @php
     $isEditing = isset($apiEndpoint);
-    $title = $isEditing ? 'Modifier un serveur SMTP' : 'Ajouter un serveur SMTP';
+    $title = $isEditing ? 'Modifier un Serveurs API' : 'Ajouter un Serveurs API';
 @endphp
 
 @section('title', $title)
