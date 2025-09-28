@@ -78,11 +78,9 @@
   <div class="card" style="padding:0; margin-top: 24px;">
     <header class="card-header" style="margin: 22px; padding: 0 0 16px 0;">
         <h3>Performance par Canal d'Envoi</h3>
-<<<<<<< HEAD
+
         <p class="hint">Statistiques détaillées pour chaque endpoint API utilisé dans cette campagne.</p>
-=======
-        <p class="hint">Statistiques détaillées pour chaque Serveurs API utilisé dans cette campagne.</p>
->>>>>>> 7847fa54a763bff5dd9ef8bccb721216d5b217c4
+
     </header>
     <div class="table-responsive-wrapper">
         <table class="sub-table">
